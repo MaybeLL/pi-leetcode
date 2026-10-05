@@ -1,6 +1,6 @@
 # pi-leetcode
 
-An agent-native LeetCode workflow for Pi Coding Agent.
+A LeetCode practice and learning workflow for Pi Coding Agent, helping users understand algorithms and solve interview problems independently.
 
 ## Status
 
@@ -9,7 +9,9 @@ This project is in the planning stage. The extension and commands below are not 
 ## Goals
 
 - Bring problem selection, local testing, and submission into Pi.
-- Support guided practice with progressive hints, letting the learner write the solution.
+- Use one practice workflow with configurable proactive guidance: independent practice, light guidance, or step-by-step coaching.
+- Adapt questions and hints to the learner's current understanding, with light guidance as the default.
+- Let users request any depth of help at any guidance level, including a complete explanation.
 - Support an agent-driven solve and debug workflow when explicitly requested.
 - Keep execution results and trajectories useful for future agent evaluation.
 
@@ -23,7 +25,11 @@ This project is in the planning stage. The extension and commands below are not 
 | `/leet hint` | Provide progressive hints without revealing the full solution by default. |
 | `/leet submit` | Submit the solution and report the judge result. |
 
-The initial direction is a TypeScript Pi extension, with Go as the first solution language. Authentication, API integration, and the local test runner will be designed before implementation.
+Guidance selection, natural-language adjustments, and practice review are part of the product design; their command syntax is still to be defined. There are no separate learning and practice modes.
+
+See [the product design](docs/product-design.md) for the agreed workflow and guidance rules.
+
+The proposed implementation is a TypeScript Pi extension bundled with a teaching skill. Go is the proposed first solution language. Authentication, API integration, language support, and the test runner will be designed before implementation.
 
 ## Development
 
