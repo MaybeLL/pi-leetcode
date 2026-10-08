@@ -1,4 +1,5 @@
 export const demoProblem = {
+    source: "demo" as const,
     id: "1",
     slug: "two-sum",
     title: "两数之和",

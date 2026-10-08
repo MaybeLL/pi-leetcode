@@ -86,3 +86,34 @@ test("invalid settings fail without resetting existing data", async (t) => {
     await assert.rejects(store.initialize(), /格式无效/);
     assert.equal(await readFile(settingsPath, "utf8"), invalid);
 });
+test("real problem storage is separate from demo and preserves edits when refreshed", async t => {
+    const { store } = await fixture(t);
+    await store.initialize();
+    const demo = await store.open(); demo.code = "// demo progress";
+    await store.save(demo, { code: (await store.read()).code, notes: demo.notes });
+    const realProblem = { source: "leetcode" as const, id: "1", questionId: "1", slug: "two-sum", title: "两数之和", language: "Go", statement: "真实题意", template: "func twoSum() {}", inputs: ["[1]\n2"] };
+    const real = new Workspace(store.home, realProblem);
+    const practice = await real.open();
+    assert.equal(practice.code, realProblem.template);
+    const baseline = { code: practice.code, notes: practice.notes };
+    practice.code = "// real progress";
+    await real.save(practice, baseline); await real.remember();
+    assert.equal((await (await store.resume()).open()).code, "// real progress");
+    assert.equal((await store.open()).code, "// demo progress");
+    assert.deepEqual(await real.inputs(), ["[1]\n2"]);
+    await assert.rejects(real.previewResult(practice), /真实题目/);
+    await assert.rejects(real.saveInputs([]), /非空/);
+});
+test("starting another practice preserves old code and can restore either attempt", async t => {
+    const { store } = await fixture(t);
+    await store.initialize();
+    const initial = await store.open();
+    const baseline = { code: initial.code, notes: initial.notes };
+    initial.code = "// previous attempt"; await store.save(initial, baseline);
+    const next = await store.restart();
+    assert.notEqual(next.attempt, store.attempt);
+    assert.notEqual((await next.read()).code, "// previous attempt");
+    assert.equal((await store.read()).code, "// previous attempt");
+    assert.equal((await store.resume()).attempt, next.attempt);
+    assert.equal((await store.recent()).length, 2);
+});

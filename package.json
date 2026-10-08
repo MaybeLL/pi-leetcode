@@ -7,12 +7,28 @@
     "type": "git",
     "url": "https://github.com/MaybeLL/pi-leetcode.git"
   },
-  "keywords": ["pi-package", "leetcode"],
-  "engines": { "node": ">=22.19.0" },
-  "files": ["extensions", "src", "skills", "docs", "README.md"],
+  "keywords": [
+    "pi-package",
+    "leetcode"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "extensions",
+    "src",
+    "skills",
+    "docs",
+    "README.md",
+    "vendor"
+  ],
   "pi": {
-    "extensions": ["./extensions/leetcode.ts"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extensions/leetcode.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "scripts": {
     "check": "tsc --noEmit",
@@ -28,8 +44,16 @@
     "@earendil-works/pi-coding-agent": "0.87.1",
     "@earendil-works/pi-tui": "0.87.1",
     "@types/node": "^22.19.0",
+    "@types/turndown": "^5.0.6",
     "tsx": "^4.20.0",
     "typebox": "1.3.27",
     "typescript": "^5.9.3"
-  }
+  },
+  "dependencies": {
+    "@maybell/leetcode-client": "file:vendor/maybell-leetcode-client-3.5.2-pi.1.tgz",
+    "turndown": "^7.2.4"
+  },
+  "bundleDependencies": [
+    "@maybell/leetcode-client"
+  ]
 }
