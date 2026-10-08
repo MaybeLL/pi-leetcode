@@ -2,8 +2,9 @@ import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Editor, Markdown, matchesKey, truncateToWidth, visibleWidth, type Component, type Focusable, type TUI, type KeyId } from "@earendil-works/pi-tui";
 import { guidanceLabels, type Guidance, type View } from "./problem.js";
 import { codeHash, Workspace, type Practice } from "./workspace.js";
-import { executionMarkdown } from "./execution.js";
-export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases";
+import type { Execution } from "./execution.js";
+import { caseCount, resultSummary } from "./results.js";
+export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases" | "status" | "platform" | "review";
 const views: View[] = ["problem", "code", "results", "notes"];
 const labels: Record<View, string> = { problem: "题目", code: "代码", results: "结果", notes: "笔记" };
 function padded(line: string, width: number): string {
@@ -26,6 +27,9 @@ export class Workbench implements Component, Focusable {
     private errorTitle = "保存失败";
     private restoreCursor = true;
     private contentHeight = 10;
+    private helpVisible = false;
+    private helpOffset = 0;
+    private operation = "";
     constructor(private tui: TUI, private theme: Theme, readonly practice: Practice, private workspace: Workspace, private guidance: Guidance, private done: (action: WorkbenchAction) => void, baseline?: {
         code: string;
         notes: string;
@@ -56,12 +60,22 @@ export class Workbench implements Component, Focusable {
         if (!this.restoreCursor)
             this.practice.view.cursor = this.codeEditor.getCursor();
     }
-    reportError(message: string): void {
+    reportError(message: string, focus = true): void {
         this.error = message;
         this.errorTitle = "操作未完成";
         this.status = "F3 查看原因 · F2 返回代码 · Esc 返回 Pi";
-        this.practice.view.view = "results";
+        if (focus) this.practice.view.view = "results";
         this.practice.view.resultOffset = 0;
+        if (!this.disposed) this.tui.requestRender();
+    }
+    setOperation(message: string): void {
+        this.operation = message;
+        if (!this.disposed) this.tui.requestRender();
+    }
+    setExecution(record: Execution): void {
+        this.practice.result = record;
+        this.status = record.state === "complete" ? `结果已就绪：${record.message} · F3 查看 · Ctrl+H 求助` : record.message;
+        if (!this.disposed) this.tui.requestRender();
     }
     get dirty(): boolean {
         return this.codeEditor.getExpandedText() !== this.expected.code ||
@@ -119,6 +133,20 @@ export class Workbench implements Component, Focusable {
     handleInput(data: string): void {
         if (this.busy)
             return;
+        if (matchesKey(data, "f5") || (this.helpVisible && matchesKey(data, "escape"))) {
+            this.helpVisible = !this.helpVisible; this.helpOffset = 0; this.tui.requestRender(); return;
+        }
+        if (this.helpVisible) {
+            this.helpOffset = Math.max(0, this.helpOffset + (matchesKey(data, "down") ? 1 : matchesKey(data, "up") ? -1 : 0));
+            this.tui.requestRender(); return;
+        }
+        if (this.error && matchesKey(data, "ctrl+o")) {
+            this.syncDraft(); this.busy = true;
+            void this.workspace.saveDraft(this.practice).then(path => {
+                this.error = `草稿已另存到 ${path}。可安全关闭后重新打开题目，读取磁盘版本。`;
+            }).catch(error => { this.error = (error as Error).message; }).finally(() => { this.busy = false; this.tui.requestRender(); });
+            return;
+        }
         const keys: [
             KeyId,
             "save" | "preview" | WorkbenchAction
@@ -126,6 +154,7 @@ export class Workbench implements Component, Focusable {
             ["ctrl+s", "save"], ["ctrl+r", "preview"], ["ctrl+h", "help"],
             ["ctrl+g", "guidance"], ["escape", "close"], ["ctrl+q", "discard"],
             ["ctrl+t", "submit"], ["ctrl+e", "cases"],
+            ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
         ];
         for (const [key, action] of keys) {
             if (matchesKey(data, key)) {
@@ -149,6 +178,14 @@ export class Workbench implements Component, Focusable {
                 editor.handleInput(data);
         }
         else {
+            if (this.practice.view.view === "results" && this.practice.result?.source === "leetcode") {
+                if (data === "d") { this.practice.view.resultDetails = !this.practice.view.resultDetails; this.practice.view.resultOffset = 0; }
+                const delta = matchesKey(data, "right") ? 1 : matchesKey(data, "left") ? -1 : 0;
+                if (delta) {
+                    this.practice.view.caseIndex = Math.max(0, Math.min((this.practice.view.caseIndex ?? 0) + delta, caseCount(this.practice.result) - 1));
+                    this.practice.view.resultOffset = 0;
+                }
+            }
             const step = matchesKey(data, "pageDown") ? this.contentHeight :
                 matchesKey(data, "pageUp") ? -this.contentHeight :
                     matchesKey(data, "down") ? 1 : matchesKey(data, "up") ? -1 : 0;
@@ -183,13 +220,13 @@ export class Workbench implements Component, Focusable {
     }
     private resultLines(width: number): string[] {
         const result = this.practice.result;
-        const stale = result && result.codeHash !== codeHash(this.codeEditor.getExpandedText()) ? "\n\n代码已变化，此结果来自之前版本。" : "";
-        const text = this.error ? `# ${this.errorTitle}\n\n${this.error}\n\n当前草稿仍在编辑器中。F2 返回代码，F4 查看笔记。Ctrl+Q 可关闭并确认丢弃草稿。` : result?.source === "leetcode" ? executionMarkdown(result) + stale : result ? `# 固定测试结果预览\n\n${result.message}\n\n` +
+        const stale = result && result.codeHash !== codeHash(this.codeEditor.getExpandedText()) ? "代码已变化，此结果来自之前版本。\n\n" : "";
+        const text = this.error ? `# ${this.errorTitle}\n\n${this.error}\n\n当前草稿仍在编辑器中。F2 返回代码，F4 查看笔记。Ctrl+O 另存草稿；Ctrl+Q 关闭后重新打开可读取磁盘版本。` : result?.source === "leetcode" ? stale + resultSummary(result, this.practice.view.caseIndex, this.practice.view.resultDetails) : result ? `# 固定测试结果预览\n\n${result.message}\n\n` +
             `- 输入：${result.input}\n- 预期：${result.expected}\n- 实际：${result.actual}\n\n` +
             `记录时间：${result.createdAt}\n\n` +
             (result.codeHash !== codeHash(this.codeEditor.getExpandedText()) ? "代码已变化，此预览记录来自之前版本。\n\n" : "") +
             "正式测试与提交尚未接入。此结果不能证明代码正确或错误。" :
-            (this.workspace.problem.source === "leetcode" ? "# 尚无结果\n\nCtrl+R 在线运行 · Ctrl+T 正式提交 · Ctrl+E 编辑用例\n\n首次运行前请用 /leet login 连接账户。" : "# 尚无结果\n\nCtrl+R 加载固定失败结果预览。不会执行代码，也不会提交到 LeetCode。");
+            (this.workspace.problem.source === "leetcode" ? "# 尚无结果\n\nCtrl+R 在线运行 · Ctrl+T 正式提交 · Ctrl+E 编辑用例\n\n首次运行或提交时会引导连接账户；现在可直接读题和编辑。" : "# 尚无结果\n\nCtrl+R 加载固定失败结果预览。不会执行代码，也不会提交到 LeetCode。");
         const lines = new Markdown(text, 0, 0, getMarkdownTheme()).render(width);
         this.practice.view.resultOffset = Math.min(this.practice.view.resultOffset, Math.max(0, lines.length - this.contentHeight));
         return lines.slice(this.practice.view.resultOffset, this.practice.view.resultOffset + this.contentHeight);
@@ -200,9 +237,14 @@ export class Workbench implements Component, Focusable {
             return ["终端过小，请扩大至至少 32×16。", "Esc 保存返回 · Ctrl+Q 关闭草稿"].map(line => truncateToWidth(line, width));
         }
         this.contentHeight = Math.max(7, height - 9);
+        if (this.helpVisible) {
+            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "Tab / Shift+Tab 切换焦点", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "Esc 保存返回 Pi，并停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
+            this.helpOffset = Math.min(this.helpOffset, Math.max(0, lines.length - height + 1));
+            return lines.slice(this.helpOffset, this.helpOffset + height - 1).map(line => truncateToWidth(line, width));
+        }
         const view = this.practice.view.view;
         const header = this.theme.fg("accent", `pi-leetcode · ${this.workspace.problem.title}`) + `  Go · ${this.workspace.problem.source === "demo" ? "演示原型" : "中国站"}`;
-        const tabs = views.map((item, i) => `${i + 1} ${item === view ? `[${labels[item]}]` : labels[item]}`).join("  ");
+        const tabs = views.map((item, i) => `F${i + 1} ${item === view ? `[${labels[item]}]` : labels[item]}`).join("  ");
         let body: string[];
         this.codeEditor.focused = false;
         this.notesEditor.focused = false;
@@ -222,12 +264,12 @@ export class Workbench implements Component, Focusable {
             body = Array.from({ length: this.contentHeight }, (_, i) => body[i] || "");
         }
         const footer = [
-            `F1–F4 / Tab 切换 · 当前焦点：${labels[view]} · Enter 换行`,
+            `F5 快捷键 · F1–F4 / Tab · 焦点：${labels[view]}`,
             this.workspace.problem.source === "demo" ? "Ctrl+S 保存 · Ctrl+R 演示结果 · Ctrl+H 求助 · Ctrl+G 引导" : "Ctrl+S 保存 · Ctrl+R 运行 · Ctrl+T 提交 · Ctrl+E 用例",
-            "Ctrl+H 求助 · Ctrl+G 引导 · Esc 保存返回 · Ctrl+Q 关闭",
+            "Esc 保存返回 · Ctrl+H 求助 · Ctrl+G 引导 · Ctrl+Q 关闭",
         ];
         return [header, `${guidanceLabels[this.guidance]} · ${this.dirty ? "有未保存修改" : "已保存"}`, tabs,
-            "─".repeat(width), ...body, this.theme.fg("muted", this.status), ...footer]
+            "─".repeat(width), ...body, this.theme.fg("muted", this.operation || this.status), ...footer]
             .map(line => truncateToWidth(line, width));
     }
     invalidate(): void {

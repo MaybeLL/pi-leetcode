@@ -166,6 +166,7 @@ test("real command, masked login and agent tools share the same saved solution a
     const ctx = {
         mode: "tui", cwd: root, model: { id: "test-model" }, async waitForIdle() {},
         ui: {
+            async select(_title: string, options: string[]) { return options[0]; },
             setWidget() {}, notify(message: string, kind: string) { if (kind === "error") assert.fail(message); },
             custom(factory: any) {
                 return new Promise(done => {

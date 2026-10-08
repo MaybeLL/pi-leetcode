@@ -29,6 +29,7 @@ export interface JudgeResult {
     memory?: string;
     stdout?: string;
     failingInput?: string;
+    cases?: { output?: string; expected?: string; stdout?: string }[];
 }
 
 /** A backend returns a job ID before polling; it never silently replays a send. */

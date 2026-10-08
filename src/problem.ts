@@ -44,6 +44,8 @@ export interface ViewState {
     view: View;
     problemOffset: number;
     resultOffset: number;
+    caseIndex?: number;
+    resultDetails?: boolean;
     cursor: {
         line: number;
         col: number;

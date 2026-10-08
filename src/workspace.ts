@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile, unlink } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rename, writeFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { demoProblem, type Guidance, type ViewState, defaultViewState } from "./problem.js";
 import type { Problem } from "./backend.js";
 import type { Execution } from "./execution.js";
@@ -107,6 +107,26 @@ export class Workspace {
             await atomicWrite(join(this.home, "settings.json"), JSON.stringify({ ...settings, guidance }, null, 2) + "\n");
         });
     }
+    async copyToDirectory(destination: string): Promise<void> {
+        await this.serialize(async () => {
+            const settings = await this.requireSettings();
+            const target = resolve(destination), relation = relative(settings.workspace, target);
+            if (!relation || (!relation.startsWith(`..${sep}`) && relation !== ".." && !isAbsolute(relation)))
+                throw new Error("请选当前练习目录以外的新目录。");
+            const lock = join(this.home, ".directory-lock");
+            await writeFile(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+            try {
+                await mkdir(dirname(target), { recursive: true });
+                // A new destination only; never merge into or overwrite someone else's directory.
+                await mkdir(target);
+                for (const name of await readdir(settings.workspace))
+                    await cp(join(settings.workspace, name), join(target, name), { recursive: true, force: false, errorOnExist: true });
+                const current = await this.requireSettings();
+                if (JSON.stringify(current) !== JSON.stringify(settings)) throw new Error("设置已变化，未切换目录；原目录和副本均保留。");
+                await atomicWrite(join(this.home, "settings.json"), JSON.stringify({ ...settings, workspace: target }, null, 2) + "\n");
+            } finally { await unlink(lock); }
+        });
+    }
     private async requireSettings(): Promise<Settings> {
         const settings = await this.settings();
         if (!settings)
@@ -144,13 +164,34 @@ export class Workspace {
     }
     async read(): Promise<Practice> {
         const directory = await this.problemDirectory();
-        const [code, notes, state] = await Promise.all([
+        const [code, notes, state, execution] = await Promise.all([
             readFile(join(directory, "solution.go"), "utf8"),
             readFile(join(directory, "notes.md"), "utf8"),
             readOptional(join(directory, "practice.json")),
+            readOptional(join(directory, "execution.json")),
         ]);
         const saved = state ? JSON.parse(state) as Pick<Practice, "view" | "result"> : undefined;
-        return { code, notes, view: saved?.view || defaultViewState(), result: saved?.result };
+        return { code, notes, view: saved?.view || defaultViewState(), result: execution ? JSON.parse(execution) : saved?.result };
+    }
+    // Background judging updates a separate file, never writes a stale editor buffer.
+    async saveExecution(record: Execution): Promise<void> {
+        await this.serialize(async () => {
+            const path = join(await this.problemDirectory(), "execution.json");
+            const previous = await readOptional(path);
+            if (previous) {
+                const old = JSON.parse(previous) as Execution;
+                if (old.id === record.id && old.state === "complete" && record.state !== "complete") return;
+                if (old.id !== record.id && old.createdAt > record.createdAt) return;
+            }
+            await atomicWrite(path, JSON.stringify(record, null, 2) + "\n");
+        });
+    }
+    async saveDraft(practice: Practice): Promise<string> {
+        const directory = join(await this.problemDirectory(), `draft-${randomUUID()}`);
+        await mkdir(directory);
+        await atomicWrite(join(directory, "solution.go"), practice.code);
+        await atomicWrite(join(directory, "notes.md"), practice.notes);
+        return directory;
     }
     // Compare with the version the caller loaded, preserving concurrent editor changes.
     async save(practice: Practice, expected: {

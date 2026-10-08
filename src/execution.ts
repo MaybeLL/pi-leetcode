@@ -16,6 +16,8 @@ export interface Execution {
     code: string;
     codeHash: string;
     input: string;
+    inputs?: string[];
+    failureKind?: string;
     jobId?: string;
     state: "sending" | "pending" | "complete" | "unknown" | "failed";
     message: string;
@@ -53,7 +55,7 @@ export class Executions {
         }
         return record;
     }
-    async start(kind: "run" | "submit", problem: Problem, code: string, input: string, signal?: AbortSignal): Promise<Execution> {
+    async start(kind: "run" | "submit", problem: Problem, code: string, input: string, signal?: AbortSignal, inputs?: string[]): Promise<Execution> {
         await mkdir(this.home, { recursive: true });
         const lockPath = join(this.home, "judge.lock");
         try { await writeFile(lockPath, String(process.pid), { flag: "wx", mode: 0o600 }); }
@@ -64,9 +66,19 @@ export class Executions {
         }
         const record: Execution = {
             source: "leetcode", backend: this.client.id, id: randomUUID(), kind, createdAt: new Date().toISOString(), account: this.account,
-            slug: problem.slug, code, codeHash: codeHash(code), input, state: "sending", message: "正在发送",
+            slug: problem.slug, code, codeHash: codeHash(code), input, inputs, state: "sending", message: "正在发送",
         };
         try {
+            const cooldownPath = join(this.home, "cooldown.json");
+            const cooldown = await readFile(cooldownPath, "utf8").catch(error => {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+                throw error;
+            });
+            if (cooldown) {
+                const value = JSON.parse(cooldown);
+                if (value.account === this.account && value.until > Date.now())
+                    throw new PlatformError("throttled", `平台刚触发限流，建议至少等待 ${Math.ceil((value.until - Date.now()) / 1000)} 秒后再试。尚未发送代码。`);
+            }
             if (signal?.aborted) throw new Error("操作已取消，尚未发送。");
             await this.persist(record);
             try {
@@ -75,6 +87,11 @@ export class Executions {
             } catch (error) {
                 record.state = error instanceof PlatformError && !error.outcomeUnknown ? "failed" : "unknown";
                 record.message = (error as Error).message;
+                record.failureKind = error instanceof PlatformError ? error.kind : undefined;
+                if (record.failureKind === "throttled") {
+                    await writeFile(cooldownPath, JSON.stringify({ account: this.account, until: Date.now() + 20000 }), { mode: 0o600 });
+                    record.message += " 建议至少等待 20 秒后手动重试；不会自动重发。";
+                }
             }
             await this.persist(record);
             return record;

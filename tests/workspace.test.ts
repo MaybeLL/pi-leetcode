@@ -117,3 +117,17 @@ test("starting another practice preserves old code and can restore either attemp
     assert.equal((await store.resume()).attempt, next.attempt);
     assert.equal((await store.recent()).length, 2);
 });
+
+test("copying a practice library preserves old files and refuses nonempty or nested destinations", async t => {
+    const { store } = await fixture(t); const settings = await store.initialize();
+    const p = await store.open(); const baseline = { code: p.code, notes: p.notes };
+    p.code = "// my solution"; p.notes = "my notes"; await store.save(p, baseline);
+    await assert.rejects(store.copyToDirectory(join(settings.workspace, "nested")), /以外/);
+    const destination = join(store.home, "custom-library");
+    await store.copyToDirectory(destination);
+    assert.equal((await store.settings())?.workspace, destination);
+    assert.equal((await store.read()).code, "// my solution");
+    assert.equal(await readFile(join(settings.workspace, "problems", "0001-two-sum", "solution.go"), "utf8"), "// my solution");
+    await assert.rejects(store.copyToDirectory(settings.workspace), { code: "EEXIST" });
+    assert.equal((await store.settings())?.workspace, destination);
+});

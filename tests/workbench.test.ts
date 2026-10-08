@@ -97,3 +97,17 @@ test("save conflict keeps the draft and stays in the workbench", async (t) => {
     assert.equal((await store.read()).code, "// external\n");
     assert.equal(screen.dirty, true);
 });
+
+test("keyboard help preserves focus and async result errors do not steal editing focus", async t => {
+    const { screen, practice } = await fixture(t, 80, 24);
+    practice.view.view = "code"; screen.render(80); screen.handleInput("x");
+    screen.handleInput("\x1b[15~"); // F5
+    assert.match(screen.render(80).join("\n"), /快捷键/);
+    screen.handleInput("\x1b");
+    assert.equal(practice.view.view, "code");
+    screen.reportError("连接失败，可稍后恢复查询", false);
+    assert.equal(practice.view.view, "code");
+    assert.equal(screen.dirty, true);
+    screen.handleInput("\x1bOR");
+    assert.match(screen.render(80).join("\n"), /连接失败/);
+});

@@ -90,6 +90,9 @@ export function decodeJudge(payload: unknown, kind: "run" | "submit"): JudgeResu
         verdict = value.correct_answer ? "样例通过" : "样例未通过";
     const text = (field: unknown) => typeof field === "string" ? cleanText(field).slice(0, 24000) :
         Array.isArray(field) ? field.map(item => cleanText(String(item))).join("\n").slice(0, 24000) : undefined;
+    const actual = Array.isArray(value.code_answer) ? value.code_answer : Array.isArray(value.code_output) ? value.code_output : undefined;
+    const expected = Array.isArray(value.expected_code_answer) ? value.expected_code_answer : undefined;
+    const stdout = Array.isArray(value.std_output_list) ? value.std_output_list : undefined;
     return {
         verdict, passed: typeof value.total_correct === "number" ? value.total_correct : undefined,
         total: typeof value.total_testcases === "number" ? value.total_testcases : undefined,
@@ -98,6 +101,9 @@ export function decodeJudge(payload: unknown, kind: "run" | "submit"): JudgeResu
         diagnostic: text(value.full_compile_error ?? value.compile_error ?? value.full_runtime_error ?? value.runtime_error),
         runtime: text(value.status_runtime), memory: text(value.status_memory),
         stdout: text(value.std_output_list ?? value.std_output), failingInput: text(value.last_testcase),
+        cases: kind === "run" && (actual || expected) ? Array.from({ length: Math.max(actual?.length ?? 0, expected?.length ?? 0) }, (_, index) => ({
+            output: text(actual?.[index]), expected: text(expected?.[index]), stdout: text(stdout?.[index]),
+        })) : undefined,
     };
 }
 

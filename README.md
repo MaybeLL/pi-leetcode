@@ -15,20 +15,29 @@ The development version connects **LeetCode China (`leetcode.cn`) and Go**. Publ
 
 **The SDK backend has passed live CN account checks, sample runs, wrong-answer/compile-error/runtime-error runs, saved-job recovery, and one formal Two Sum submission (Accepted, 65/65). This remains an experimental development version; broader problems and failure conditions need continued validation.** The original demo remains available separately through `/leet demo`; its results are explicitly marked as fixed fixtures.
 
-## Start from this checkout
+## Get started
 
 Requires Node.js 22.19+; tested with Pi 0.87.1 and 1.1.0:
+
+```bash
+pi install git:github.com/MaybeLL/pi-leetcode
+pi
+```
+
+Enter `/leet`. First use creates `~/.pi/leetcode/` and opens the public Two Sum problem with light guidance. Later visits resume your practice. Use `/leet pick` to choose another problem or `/leet open 42` for a specific one. No practice repository or login is needed to start reading and editing; paid content may require platform access.
+
+The first Run or Submit requests account connection if needed, then continues that operation. Cancel returns to your saved practice. Existing credentials are reused. `/leet doctor` shows the loaded extension path, backend, runtime and data locations when diagnosing installation problems.
+
+### Develop from this checkout
+
+Run these commands **inside the cloned pi-leetcode directory**:
 
 ```bash
 npm install
 pi --no-extensions --no-skills -e ./extensions/leetcode.ts --skill ./skills/leetcode-coach
 ```
 
-`--no-extensions --no-skills` prevents an already installed copy from registering duplicate commands or shadowing the local coaching skill in this development session. The explicit `-e` and `--skill` paths load this checkout. Other automatically discovered extensions and skills are disabled for this invocation.
-
-Use `/leet` for first setup and problem selection, or `/leet open 42` to open a specific problem. Default storage is created automatically at `~/.pi/leetcode/`. No practice repository needs to be created manually. Existing prototype data is preserved; use `/leet pick` to move from the demo to real problems.
-
-For the GitHub version, install with `pi install git:github.com/MaybeLL/pi-leetcode`, then restart Pi or `/reload`. Local checkout changes become available through this route only after they are pushed.
+The flags disable auto-discovered extensions and skills so an installed copy cannot shadow the checkout. The explicit paths load this checkout. After updating an installed package, restart Pi to load code and dependency changes.
 
 ### Backend selection
 
@@ -51,7 +60,7 @@ Public reading and editing work without a login. To run or submit:
 
 1. Sign in to **leetcode.cn** in your browser.
 2. In browser developer tools, find the site's `LEETCODE_SESSION` and `csrftoken` cookie values.
-3. Run `/leet login` in Pi. In its dedicated hidden input, paste `LEETCODE_SESSION=<value>; csrftoken=<value>`, then Enter.
+3. Use the connection menu shown by Run/Submit, or `/leet login`. The menu includes browser steps and an open-website action. In its dedicated hidden input, paste `LEETCODE_SESSION=<value>; csrftoken=<value>`, then Enter.
 4. The plugin validates the session before saving it. `/leet account` checks it again; `/leet logout` removes it.
 
 Do not paste credentials into the normal Pi chat. They are stored locally in `auth/cn.json` with mode 0600 inside a mode-0700 directory; this is private-file storage, **not encryption**. The plugin does not include credentials in model context, practice records or errors. Like other Pi extensions, it shares the host process's filesystem permissions.
@@ -62,18 +71,19 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 | Command | Behavior |
 | --- | --- |
-| `/leet` | Set up on first use, otherwise resume the current/recent practice. |
+| `/leet` | Open Two Sum on first use, otherwise resume the current/recent practice. |
 | `/leet pick` | Search titles/numbers, filter difficulty, and browse pages. |
 | `/leet open 42` | Open by number, slug, or a `leetcode.cn/problems/...` URL. |
 | `/leet recent` | Restore one of the last 50 practice entries; older files are retained. |
 | `/leet restart` | Start a fresh attempt, preserving the previous code and notes. |
-| `/leet cases` | Edit a JSON array of test-input strings; each string separates parameters with `\n`. |
+| `/leet cases` | Add/edit/delete individual cases, with one parameter per line; advanced JSON editing remains available. |
 | `/leet test` | Save/run the active real problem's inputs online. Demo problems show fixtures instead. |
 | `/leet submit` | Formally submit the saved Go code to the connected account. |
 | `/leet status [record-id]` | Resume querying an existing job without sending code again. |
 | `/leet hint` | Ask Pi for a limited hint using the saved practice context. |
-| `/leet review` | Start a guided review in Pi; does not overwrite notes. |
-| `/leet settings` | Change proactive guidance. |
+| `/leet review` | Open reflection, help history, user labels or guided review; notes remain separate. |
+| `/leet settings` | Change proactive guidance or copy the practice library to a new directory. |
+| `/leet doctor` | Inspect runtime, loaded source, backend, connection and data locations. |
 | `/leet leave` | Detach practice coaching from the Pi conversation. |
 | `/leet demo` | Open the original offline Two Sum prototype. |
 
@@ -91,11 +101,17 @@ Wide terminals split problem and code; narrow terminals switch views. The editor
 | Ctrl+T | Save and formally submit a real problem. |
 | Ctrl+E | Save and edit test inputs. |
 | Ctrl+H | Save and ask Pi for help. |
+| Ctrl+P | Resume the saved judge job without resending. |
+| Ctrl+B | Open platform submission history. |
+| Ctrl+V | Open reflection and learning history. |
+| Left / Right in results | Select a test case. |
+| d in results | Toggle technical execution details. |
+| F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | Ctrl+G | Save and choose guidance. |
 | Esc | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
 
-The minimum viewport is 32×16; 80×24 or larger is recommended. During an online operation, a progress view replaces the editor. Esc returns after local cancellation settles; `/leet status` resumes polling. Editing while polling is a later improvement.
+The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. Esc stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling.
 
 Results retain the exact submitted code and inputs. Editing afterwards marks the result as belonging to an earlier version. Sample success never claims whole-problem Accepted. Missing platform output stays missing. If a POST may have succeeded but returned no job ID, its outcome is unknown and the plugin does not automatically repeat it.
 
@@ -103,7 +119,11 @@ Results retain the exact submitted code and inputs. Editing afterwards marks the
 
 Three guidance levels share one workflow: independent, light (default), and coached. A one-off help request never changes the level. Help requires a configured Pi model; reading/editing/judging do not.
 
-After opening a problem or completing an operation, returning from the workbench can start one observation/question for light/coached guidance. It never interrupts the editor or reacts to silence. Fine-grained teaching events and durable help-depth tracking are still planned.
+Coached guidance asks one opening question per attempt; independent guidance stays quiet. Light/coached guidance offers an observation after a new completed result when returning to Pi. Reopening or querying the same result does not repeat it. It never interrupts editing or reacts to silence.
+
+Ctrl+H offers problem explanation, thought checking, a small hint, selected-case analysis, full explanation, and free-form requests. Problem-only help excludes your solution and results from `leet_context`. Return with `/leet` to the saved position; Ctrl+Alt+L fills that command when the chat editor is empty.
+
+Each attempt saves help requests and replies in `learning.json` (requests capped at 6,000 characters, replies at 8,000 with a truncation notice). Model failures remain failed requests and can be retried. `/leet review` lets you label the help actually received and write a reflection separate from notes. Guidance, requested help depth, and actual help are recorded separately; Accepted never implies mastery.
 
 Agent tools include `leet_search`, `leet_open`, `leet_context`, `leet_run`, `leet_submit`, `leet_status` and `leet_set_guidance`. Commands and tools share execution/storage behavior. Submission requires an explicit user request, including a clearly authorized solve-and-submit workflow. Teaching instructions ask the agent to stop after five consecutive automated attempts or repeated failures; they are not a filesystem sandbox or a hard agent-turn budget.
 
@@ -123,9 +143,9 @@ Agent tools include `leet_search`, `leet_open`, `leet_context`, `leet_run`, `lee
   cache/
 ```
 
-Choose a custom practice directory at setup. `PI_LEETCODE_HOME` changes the application data directory for isolated trials. Paths are independent of Pi's working directory. Cache cleanup must not remove workspace/auth files. Existing-directory migration and offline catalog caching are not implemented.
+Use `/leet settings` to copy the practice library to a new custom directory. Close other Pi sessions and editors using the library first. The destination must not already exist; successful copying switches the setting and retains the entire old directory. Credentials stay in the application data directory. `PI_LEETCODE_HOME` changes the application data directory for isolated trials. Paths are independent of Pi's working directory. Cache cleanup must not remove workspace/auth files. Merging into an existing directory and offline catalog caching are not implemented.
 
-External edits are detected before saves. Concurrent Pi saves/sends use exclusive lock files. An abnormal process exit can leave `.write-lock` in a problem folder or `judge.lock` under records. Check that the old process has stopped and inspect platform history before manually removing such a lock; it is never silently discarded. A response saved before a subsequent practice-file conflict can be recovered using `/leet status <record-id>`.
+Background judge updates use a separate `execution.json` file and do not rewrite code or notes. External edits are detected before saves; Ctrl+O on a save error preserves the draft in a separate folder. Concurrent Pi saves/sends use exclusive lock files. An abnormal process exit can leave `.write-lock` in a problem folder or `judge.lock` under records. Check that the old process has stopped and inspect platform history before manually removing such a lock; it is never silently discarded. A response saved before a subsequent practice-file conflict can be recovered using `/leet status <record-id>`.
 
 ## Development and verification
 
@@ -152,4 +172,4 @@ Verification execution records are retained under `~/.pi/leetcode/verification/`
 
 Automated tests use temporary directories and simulated HTTP responses, not a live account. See [product design](docs/product-design.md), [development plan](docs/full-workflow-plan.md), [platform research](docs/platform-integration-research.md), and [verification status](docs/integration-status.md).
 
-Later work includes broader live judge coverage, COM/other languages, offline catalog, richer per-case results, help history, full review UI, workspace migration and a local runner. The underlying website endpoints are not a promised stable third-party API.
+Later work includes broader live judge coverage, COM/other languages, offline catalog, per-case platform verdicts, broader teaching evaluation and a local runner. The underlying website endpoints are not a promised stable third-party API.
