@@ -50,7 +50,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@maybell/leetcode-client": "file:vendor/maybell-leetcode-client-3.5.2-pi.3.tgz",
+    "@maybell/leetcode-client": "file:vendor/maybell-leetcode-client-3.5.2-pi.4.tgz",
     "turndown": "^7.2.4"
   },
   "bundleDependencies": [

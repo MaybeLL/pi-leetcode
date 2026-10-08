@@ -77,10 +77,31 @@ test("SDK adapter refuses unavailable templates, examples and foreign links", as
 test("stored backend identity overrides environment default and unknown backends fail closed", t => {
     const previous = process.env.PI_LEETCODE_BACKEND;
     t.after(() => { if (previous === undefined) delete process.env.PI_LEETCODE_BACKEND; else process.env.PI_LEETCODE_BACKEND = previous; });
+    delete process.env.PI_LEETCODE_BACKEND;
+    assert.equal(createBackend().id, SDK_BACKEND_ID);
+    assert.equal(createBackend(undefined, DIRECT_BACKEND_ID).id, DIRECT_BACKEND_ID);
     process.env.PI_LEETCODE_BACKEND = "sdk";
     assert.equal(createBackend().id, SDK_BACKEND_ID);
     assert.equal(createBackend(undefined, DIRECT_BACKEND_ID).id, DIRECT_BACKEND_ID);
     process.env.PI_LEETCODE_BACKEND = "direct";
     assert.equal(createBackend(undefined, SDK_BACKEND_ID).id, SDK_BACKEND_ID);
     assert.throws(() => createBackend(undefined, "unsupported"), /未知/);
+});
+
+test("number lookup finds exact IDs beyond the first fuzzy-search page in both backends", async t => {
+    const { LeetCodeCN } = await import("../src/platform.js");
+    const sdk = new LeetCodeClient("leetcode.cn");
+    t.mock.method(sdk, "getProblem", async () => detail);
+    const direct = new LeetCodeCN(undefined, (async () => new Response(JSON.stringify({ data: { question: detail } }))) as typeof fetch);
+    for (const backend of [new SdkBackend(undefined, sdk), direct]) {
+        const offsets: number[] = [];
+        t.mock.method(backend, "search", async (keyword: string, difficulty = "", skip = 0) => {
+            assert.equal(keyword, "42"); assert.equal(difficulty, "");
+            offsets.push(skip);
+            const item = { id: "142", slug: "wrong", title: "other", difficulty: "Easy", paid: false };
+            return { total: 4456, items: skip === 40 ? [{ ...item, id: "42", slug: "fixture" }] : Array(20).fill(item) };
+        });
+        assert.equal((await backend.problem("42")).slug, "fixture");
+        assert.deepEqual(offsets, [0, 20, 40]);
+    }
 });

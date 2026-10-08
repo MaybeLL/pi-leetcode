@@ -1,6 +1,7 @@
 import { LeetCodeClient, ClientError, clientError } from "@maybell/leetcode-client";
 import { PlatformError, SDK_BACKEND_ID, type Account, type Credentials, type LeetCodeBackend, type Problem, type ProblemSummary, type JudgeResult } from "./backend.js";
 import { cleanText, decodeJudge, statementMarkdown } from "./platform.js";
+import { slugForNumber } from "./problem-reference.js";
 
 type Client = Pick<LeetCodeClient, "setCredentials" | "checkAuth" | "getProblems" | "getProblem" | "startRun" | "startSubmit" | "checkJob">;
 
@@ -52,9 +53,7 @@ export class SdkBackend implements LeetCodeBackend {
             slug = url.pathname.match(/^\/problems\/([^/]+)/)?.[1] || "";
         }
         if (/^\d+$/.test(slug)) {
-            const match = (await this.search(slug)).items.find(item => item.id === slug);
-            if (!match) throw new Error("未找到该题号，请使用题目链接或英文 slug。");
-            slug = match.slug;
+            slug = await slugForNumber(slug, this.search.bind(this));
         }
         if (!/^[a-zA-Z0-9-]+$/.test(slug)) throw new Error("请输入题号、英文 slug 或中国站题目链接。");
         const q = await safely(() => this.sdk.getProblem(slug));

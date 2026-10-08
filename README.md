@@ -4,41 +4,41 @@ Practice LeetCode inside Pi Coding Agent: read problems, write Go, inspect resul
 
 Backend research: [legacy CLI evaluation](docs/cli-backend-evaluation.md) and
 [modern CLI evaluation](docs/modern-cli-evaluation.md). The modern client's API
-layer is now available as an opt-in SDK backend. The development default remains
-the direct CN adapter until live account judging is verified. The SDK is built
+layer is now the default SDK backend after live CN judging verification. The
+direct CN adapter remains available as a fallback. The SDK is built
 from our [fixed fork](https://github.com/MaybeLL/leetcode-cli/tree/pi-sdk), without
 the upstream CLI/TUI or keychain dependencies.
 
 ## Status
 
-The development version connects **LeetCode China (`leetcode.cn`) and Go**. Public problem retrieval and search have been verified live, including array, linked-list, binary-tree and design problems. The workbench runs on Pi 0.87.1.
+The development version connects **LeetCode China (`leetcode.cn`) and Go**. Public problem retrieval and search have been verified live, including array, linked-list, binary-tree and design problems. The workbench has been tested on Pi 0.87.1 and 1.1.0.
 
-**Account connection and a real custom-input Run result have been verified with the SDK backend. Formal Submit and the full live judge/error matrix remain unverified. Treat this as an experimental development version.** The original demo remains available separately through `/leet demo`; its results are explicitly marked as fixed fixtures.
+**The SDK backend has passed live CN account checks, sample runs, wrong-answer/compile-error/runtime-error runs, saved-job recovery, and one formal Two Sum submission (Accepted, 65/65). This remains an experimental development version; broader problems and failure conditions need continued validation.** The original demo remains available separately through `/leet demo`; its results are explicitly marked as fixed fixtures.
 
 ## Start from this checkout
 
-Requires Node.js 22.19+ and Pi 0.87.1 (the currently tested version):
+Requires Node.js 22.19+; tested with Pi 0.87.1 and 1.1.0:
 
 ```bash
 npm install
-pi --no-extensions -e ./extensions/leetcode.ts --skill ./skills/leetcode-coach
+pi --no-extensions --no-skills -e ./extensions/leetcode.ts --skill ./skills/leetcode-coach
 ```
 
-`--no-extensions` prevents an already installed copy from registering duplicate commands in this development session. It also disables other automatically discovered extensions for this invocation.
+`--no-extensions --no-skills` prevents an already installed copy from registering duplicate commands or shadowing the local coaching skill in this development session. The explicit `-e` and `--skill` paths load this checkout. Other automatically discovered extensions and skills are disabled for this invocation.
 
 Use `/leet` for first setup and problem selection, or `/leet open 42` to open a specific problem. Default storage is created automatically at `~/.pi/leetcode/`. No practice repository needs to be created manually. Existing prototype data is preserved; use `/leet pick` to move from the demo to real problems.
 
 For the GitHub version, install with `pi install git:github.com/MaybeLL/pi-leetcode`, then restart Pi or `/reload`. Local checkout changes become available through this route only after they are pushed.
 
-### Try the SDK backend
+### Backend selection
 
 ```bash
-PI_LEETCODE_BACKEND=sdk pi --no-extensions -e ./extensions/leetcode.ts --skill ./skills/leetcode-coach
+PI_LEETCODE_BACKEND=sdk pi --no-extensions --no-skills -e ./extensions/leetcode.ts --skill ./skills/leetcode-coach
 ```
 
 Public reading works without login. This setting selects the backend for new
-operations; saved jobs always resume through their original backend. Omit it or
-set `PI_LEETCODE_BACKEND=direct` to use the current default. Credentials continue
+operations; saved jobs always resume through their original backend. SDK is the
+default when omitted; set `PI_LEETCODE_BACKEND=direct` to use the fallback. Credentials continue
 to come only from this plugin's explicit `/leet login`, not another CLI.
 
 The SDK artifact is pinned and distributed with the plugin; no fork checkout or
@@ -143,11 +143,13 @@ The default platform probe only reads public questions and searches. Authenticat
 ```bash
 node --import tsx scripts/verify-platform.ts --authenticated
 # Also sends one formal Two Sum submission to the connected account:
-node --import tsx scripts/verify-platform.ts --authenticated --submit
+PI_LEETCODE_BACKEND=sdk node --import tsx scripts/verify-platform.ts --authenticated --submit
+# Add wrong-answer, compile-error and runtime-error runs (20 seconds between sends):
+PI_LEETCODE_BACKEND=sdk node --import tsx scripts/verify-platform.ts --authenticated --matrix
 ```
 
 Verification execution records are retained under `~/.pi/leetcode/verification/`. A failed/unknown probe must be investigated before rerunning it; do not repeatedly submit to test connectivity.
 
 Automated tests use temporary directories and simulated HTTP responses, not a live account. See [product design](docs/product-design.md), [development plan](docs/full-workflow-plan.md), [platform research](docs/platform-integration-research.md), and [verification status](docs/integration-status.md).
 
-Later work includes live judge certification, COM/other languages, offline catalog, richer per-case results, help history, full review UI, workspace migration and a local runner. The underlying website endpoints are not a promised stable third-party API.
+Later work includes broader live judge coverage, COM/other languages, offline catalog, richer per-case results, help history, full review UI, workspace migration and a local runner. The underlying website endpoints are not a promised stable third-party API.

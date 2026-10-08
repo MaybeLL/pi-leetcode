@@ -11,6 +11,7 @@ import { Workspace } from "../src/workspace.js";
 import type { LeetCodeBackend } from "../src/backend.js";
 import { DIRECT_BACKEND_ID } from "../src/backend.js";
 import { Executions } from "../src/execution.js";
+import { LeetCodeCN } from "../src/platform.js";
 initTheme("dark", false);
 test("Pi tools use the injected backend and keep fetched problems in the existing workspace", async t => {
     const root = await mkdtemp(join(tmpdir(), "pi-leetcode-backend-"));
@@ -157,7 +158,8 @@ test("real command, masked login and agent tools share the same saved solution a
     const tools = new Map<string, any>();
     let command: any;
     const messages: string[] = [];
-    extension({ registerCommand(_name: string, definition: any) { command = definition; }, registerTool(definition: any) { tools.set(definition.name, definition); }, on() {}, appendEntry() {}, sendUserMessage(message: string) { messages.push(message); } } as unknown as ExtensionAPI);
+    extension({ registerCommand(_name: string, definition: any) { command = definition; }, registerTool(definition: any) { tools.set(definition.name, definition); }, on() {}, appendEntry() {}, sendUserMessage(message: string) { messages.push(message); } } as unknown as ExtensionAPI,
+        credentials => new LeetCodeCN(credentials));
     await new Workspace(root).initialize("independent");
     const theme = { fg: (_color: string, text: string) => text } as Theme;
     const tui = { terminal: { rows: 24, columns: 80 }, requestRender() {} } as unknown as TUI;

@@ -1,8 +1,8 @@
 # LeetCode client artifact
 
-`maybell-leetcode-client-3.5.2-pi.3.tgz` is a library-only build from
+`maybell-leetcode-client-3.5.2-pi.4.tgz` is a library-only build from
 [MaybeLL/leetcode-cli, pi-sdk](https://github.com/MaybeLL/leetcode-cli/tree/pi-sdk),
-fork commit `3f3e4ca` (full revision is in the archive's SOURCE.json), based on
+fork commit `294bc86` (full revision is in the archive's SOURCE.json), based on
 night-slayer18/leetcode-cli v3.5.2 at
 `282096f5c3952ae0e94a704adac344ec73c7732b`.
 

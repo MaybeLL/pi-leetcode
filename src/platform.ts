@@ -1,4 +1,5 @@
 import TurndownService from "turndown";
+import { slugForNumber } from "./problem-reference.js";
 
 import { PlatformError, DIRECT_BACKEND_ID, type Problem, type Credentials, type Account, type ProblemSummary, type FailureKind, type JudgeResult, type LeetCodeBackend } from "./backend.js";
 // Keep previous imports compatible while callers move to the backend contract.
@@ -168,10 +169,7 @@ export class LeetCodeCN implements LeetCodeBackend {
             slug = url.pathname.match(/^\/problems\/([^/]+)/)?.[1] || "";
         }
         if (/^\d+$/.test(slug)) {
-            const { items } = await this.search(slug);
-            const match = items.find(item => item.id === slug);
-            if (!match) throw new Error("未找到该题号，请使用题目链接或英文 slug。");
-            slug = match.slug;
+            slug = await slugForNumber(slug, this.search.bind(this));
         }
         if (!/^[a-zA-Z0-9-]+$/.test(slug)) throw new Error("请输入题号、英文 slug 或中国站题目链接。");
         const data = await this.graphql(`query($titleSlug: String!) { question(titleSlug: $titleSlug) {
