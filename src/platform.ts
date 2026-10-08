@@ -202,12 +202,12 @@ export class LeetCodeCN implements LeetCodeBackend {
             lang: "golang", question_id: problem.questionId, typed_code: code, ...(kind === "run" ? { data_input: input } : {}),
         }, true, signal);
         const id = response[kind === "run" ? "interpret_id" : "submission_id"];
-        if ((typeof id !== "string" && typeof id !== "number") || !/^[a-zA-Z0-9_-]+$/.test(String(id)))
+        if ((typeof id !== "string" && typeof id !== "number") || !/^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/.test(String(id)))
             throw new PlatformError("protocol", "未收到任务编号，发送状态未知；请查看平台记录。", true);
         return String(id);
     }
     async check(id: string, kind: "run" | "submit", signal?: AbortSignal): Promise<JudgeResult | undefined> {
-        if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error("无效任务编号。");
+        if (!/^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/.test(id)) throw new Error("无效任务编号。");
         return decodeJudge(await this.request(`/submissions/detail/${id}/check/`, undefined, false, signal), kind);
     }
 }

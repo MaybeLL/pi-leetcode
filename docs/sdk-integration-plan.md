@@ -68,3 +68,7 @@ SDK 测试通过公开接口和可控 HTTP transport，覆盖请求次数、请�
 - fork 与 Pi 实现均提交推送；未向上游发送 PR。
 
 真实判题、登录验证与默认切换未执行，不将 fixture Accepted 声称为平台通过。
+
+### 后续登录验收更新
+
+用户随后完成登录。SDK 身份验证和一次真实自定义输入 Run 的结果/原任务恢复查询通过；修复了带小数时间戳的运行 ID 和数组 code_output 的兼容性。当前 SDK 为 3.5.2-pi.3，fork `3f3e4ca`。详情与验证局限见 [接入验收记录](integration-status.md)。正式 Submit、完整真实错误矩阵、默认切换仍待验收。

@@ -13,7 +13,7 @@ the upstream CLI/TUI or keychain dependencies.
 
 The development version connects **LeetCode China (`leetcode.cn`) and Go**. Public problem retrieval and search have been verified live, including array, linked-list, binary-tree and design problems. The workbench runs on Pi 0.87.1.
 
-**Authenticated Run and Submit are implemented and covered by simulated integration tests, but have not yet passed live account verification. Treat this as an experimental development version.** The original demo remains available separately through `/leet demo`; its results are explicitly marked as fixed fixtures.
+**Account connection and a real custom-input Run result have been verified with the SDK backend. Formal Submit and the full live judge/error matrix remain unverified. Treat this as an experimental development version.** The original demo remains available separately through `/leet demo`; its results are explicitly marked as fixed fixtures.
 
 ## Start from this checkout
 

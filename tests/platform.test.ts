@@ -66,3 +66,18 @@ test("credential parsing rejects header injection and never reflects secrets in 
     assert.throws(() => parseCredentials("LEETCODE_SESSION=SECRET\r\nCookie: bad; csrftoken=a"), error => !String(error).includes("SECRET"));
     assert.throws(() => parseCredentials("LEETCODE_SESSION=abc"), /两项/);
 });
+test("direct adapter preserves dotted run IDs but rejects traversal segments", async () => {
+    const id = "runcode_1700000000.123456_demo";
+    const requests: string[] = [];
+    const api = new LeetCodeCN({ session: "fixture", csrf: "fixture" }, (async (url, init) => {
+        requests.push(String(url));
+        return respond(init?.method === "POST" ? { interpret_id: id } : { state: "SUCCESS", status_code: 10, correct_answer: true });
+    }) as typeof fetch);
+    const problem = { source: "leetcode" as const, id: "1", questionId: "1", slug: "two-sum", title: "test", language: "Go", statement: "", template: "" };
+    assert.equal(await api.start("run", problem, "code", "[3,3]\n6"), id);
+    assert.equal((await api.check(id, "run"))?.verdict, "样例通过");
+    assert.equal(requests[1], `https://leetcode.cn/submissions/detail/${id}/check/`);
+    for (const invalid of ["..", ".", "a/../b", "a..b", "a?x=1", "a#b"])
+        await assert.rejects(api.check(invalid, "run"), /无效任务编号/);
+    assert.equal(requests.length, 2);
+});
