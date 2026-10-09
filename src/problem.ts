@@ -44,6 +44,9 @@ export interface ViewState {
     view: View;
     problemOffset: number;
     resultOffset: number;
+    /** Optional for compatibility with practice files saved before notes had a reading mode. */
+    notesOffset?: number;
+    notesEditing?: boolean;
     caseIndex?: number;
     resultDetails?: boolean;
     cursor: {

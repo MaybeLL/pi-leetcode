@@ -1,6 +1,7 @@
 import type { ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { Input, matchesKey, truncateToWidth, visibleWidth, type Component, type Focusable, type TUI, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import type { LeetCodeBackend, ProblemSummary } from "./backend.js";
+import { focusStyle } from "./focus-style.js";
 import { difficultyFilters, difficultyLabel, difficultyNames, ExactNumberLookup, PAGE_SIZE, ProblemCatalog, type CatalogItems, type DifficultyFilter, type ScopeFilter } from "./picker.js";
 import { emptyLocalStatus, localStatusHint, localStatusLabels, type LocalStatus, type LocalStatusIndex } from "./local-status.js";
 
@@ -88,7 +89,7 @@ export class ProblemPicker implements Component, Focusable {
         this.debounceMs = options.debounceMs ?? 300;
         this.search = options.search;
         this.exact = new ExactNumberLookup(options.search);
-        this.searchInput = new Input({ prompt: "搜索 │ ", placeholder: "题号 / 中文标题 / 英文关键词（留空浏览）" });
+        this.searchInput = new Input({ prompt: "", placeholder: "题号 / 中文标题 / 英文关键词（留空浏览）" });
         this.searchInput.onSubmit = () => this.open();
         this.searchInput.focused = true;
         void this.load();
@@ -329,6 +330,7 @@ export class ProblemPicker implements Component, Focusable {
                 const index = this.chips().findIndex(item => item.key === `${kind}:${value}`);
                 if (index < 0) break;
                 this.chip = index;
+                this.focus = "filters";
                 if (kind === "difficulty") this.setDifficulty(value as DifficultyFilter);
                 else this.setScope(value as ScopeFilter);
                 break;
@@ -368,48 +370,38 @@ export class ProblemPicker implements Component, Focusable {
     }
 
     private filterSection(width: number): { lines: string[]; regions: RelativeRegion[] } {
-        const theme = this.theme;
-        const chips = this.chips();
-        const build = (prefix: string, indices: number[]): { text: string; regions: RelativeRegion[]; width: number } => {
-            let text = `${prefix} `;
-            const regions: RelativeRegion[] = [];
-            for (const index of indices) {
-                const chip = chips[index];
-                if (!chip) continue;
-                if (regions.length) text += " ";
-                const label = `[${chip.label}]`;
-                const styled = chip.active ? theme.fg("accent", label) : theme.fg("muted", label);
-                const cursor = this.focus === "filters" && this.chip === index ? `\x1b[1m${styled}\x1b[22m` : styled;
-                const start = visibleWidth(text);
-                text += cursor;
-                regions.push({ line: 0, start, end: start + visibleWidth(label), kind: "chip", value: chip.key });
+        const lines: string[] = [];
+        const regions: RelativeRegion[] = [];
+        let row = "";
+        for (const [index, chip] of this.chips().entries()) {
+            const focused = this.focus === "filters" && this.chip === index;
+            // A check marks the applied value; only the keyboard target gets inverse video.
+            const label = `${focused ? "▸" : " "}[${chip.active ? "✓" : " "}${chip.label}]`;
+            const prefix = index === 0 ? "难度 " : index === 4 ? "权限 " : "";
+            const gap = row ? " " : "";
+            if (visibleWidth(row + gap + prefix + label) > width) {
+                lines.push(row);
+                row = "";
             }
-            return { text, regions, width: visibleWidth(text) };
-        };
-        const first = build("难度", [0, 1, 2, 3]);
-        const second = build("权限", [4, 5]);
-        if (first.width + 2 + second.width <= width) {
-            const offset = first.width + 2;
-            return {
-                lines: [truncateToWidth(first.text + "  " + second.text, width)],
-                regions: [...first.regions, ...second.regions.map(region => ({ ...region, start: region.start + offset, end: region.end + offset }))],
-            };
+            row += (row ? " " : "") + prefix;
+            const start = visibleWidth(row);
+            row += focused ? focusStyle(this.theme, label) : this.theme.fg("muted", label);
+            regions.push({ line: lines.length, start, end: start + visibleWidth(label), kind: "chip", value: chip.key });
         }
-        return {
-            lines: [truncateToWidth(first.text, width), truncateToWidth(second.text, width)],
-            regions: [...first.regions, ...second.regions.map(region => ({ ...region, line: 1 }))],
-        };
+        if (row) lines.push(row);
+        return { lines, regions };
     }
 
     private listRow(item: PickerItem, index: number, width: number): string {
-        const marker = index === this.selected ? "▸ " : "  ";
+        const focused = this.focus === "list" && index === this.selected;
+        const marker = index === this.selected ? (focused ? "▸ " : "● ") : "  ";
         const title = `${item.exact ? "★ " : ""}${item.summary.id} · ${item.summary.title}`;
         const right = [difficultyLabel(item.summary.difficulty), ...(item.summary.paid ? ["会员"] : []), localStatusLabels[item.status]].join(" · ");
         const rightWidth = visibleWidth(right);
         const room = Math.max(4, width - rightWidth - 3);
         const body = padded(truncateToWidth(marker + title, room, "…"), Math.max(0, width - rightWidth - 2));
         const line = body + "  " + right;
-        return index === this.selected ? this.theme.fg("accent", line) : line;
+        return focused ? focusStyle(this.theme, line) : line;
     }
 
     render(width: number): string[] {
@@ -423,7 +415,12 @@ export class ProblemPicker implements Component, Focusable {
         const head: string[] = [];
         const headRegions: RelativeRegion[] = [];
         this.searchInput.focused = this.focused && this.focus === "search";
-        head.push(this.searchInput.render(width)[0] ?? "");
+        const searchActive = this.focus === "search";
+        const searchLabel = `${searchActive ? "▸" : " "} 搜索 │ `;
+        let input = this.searchInput.render(width - visibleWidth(searchLabel))[0] ?? "";
+        // Input paints a caret even when unfocused; do not leave a second focus signal.
+        if (!searchActive) input = input.replace(/\x1b\[(?:7|27)m/g, "");
+        head.push((searchActive ? focusStyle(theme, searchLabel) : theme.fg("muted", searchLabel)) + input);
         headRegions.push({ line: 0, start: 0, end: width, kind: "search" });
         const filters = this.filterSection(width);
         const filterBase = head.length;
@@ -460,10 +457,24 @@ export class ProblemPicker implements Component, Focusable {
             }
             const start = row ? visibleWidth(row) + 2 : 0;
             if (button.enabled) tailRegions.push({ line: tail.length, start, end: start + visibleWidth(label), kind: button.kind });
-            row += (row ? "  " : "") + (button.enabled ? theme.fg("accent", label) : theme.fg("dim", label));
+            row += (row ? "  " : "") + (button.enabled ? label : theme.fg("dim", label));
         }
         if (row) tail.push(truncateToWidth(row, width));
-        tail.push(truncateToWidth(theme.fg("muted", "↑↓ 选择 · Enter 打开 · ←→ 翻页 · Tab 切换筛选/搜索 · Esc 取消"), width));
+        const hints = this.focus === "search"
+            ? "当前：搜索 · 输入关键词 · ↓ 选题 · Enter 打开所选 · Tab 筛选 · Esc 取消"
+            : this.focus === "filters"
+                ? "当前：筛选 · ←→ 定位 · Enter/空格 应用 · Tab 列表 · ↑ 搜索 · Esc 取消"
+                : `当前：题目列表 · ↑↓ 选择 · Enter ${awaitingMore ? "继续加载" : "打开"} · ←→ 翻页 · Tab 搜索 · Esc 取消`;
+        // Wrap whole key/action pairs so narrow terminals never split a shortcut.
+        let hintRow = "";
+        for (const hint of (hints + (this.error ? " · Ctrl+R 重试" : "")).split(" · ")) {
+            if (hintRow && visibleWidth(hintRow + " · " + hint) > width) {
+                tail.push(theme.fg("muted", hintRow));
+                hintRow = "";
+            }
+            hintRow += (hintRow ? " · " : "") + hint;
+        }
+        if (hintRow) tail.push(theme.fg("muted", hintRow));
 
         const errorLine = this.error ? truncateToWidth(theme.fg("error", `查询失败：${this.error}  [重试]`), width) : undefined;
         const errorRegions: RelativeRegion[] = [];

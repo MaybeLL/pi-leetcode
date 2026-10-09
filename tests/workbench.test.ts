@@ -67,7 +67,9 @@ test("typing and Enter edit code, save before help, and restore the cursor on re
 test("switching views does not insert shortcut characters or submit chat", async (t) => {
     const { screen, practice, store } = await fixture(t);
     screen.render(120);
-    screen.handleInput("\x1bOQ");
+    screen.handleInput("\x1bOQ"); // Removed F2 is not a separate page.
+    assert.equal(practice.view.view, "problem");
+    screen.handleInput("\r");
     assert.equal(practice.view.view, "code");
     screen.handleInput("\x1bOR");
     assert.equal(practice.view.view, "results");
@@ -82,7 +84,8 @@ test("demo preview is explicit and becomes stale when code changes", async (t) =
     await eventually(() => screen.render(120).join("\n").includes("固定失败结果已加载"));
     assert.match(screen.render(120).join("\n"), /没有执行当前代码/);
     screen.handleInput("\x1b[1;2Z"); // No reliance on a particular Shift+Tab encoding.
-    screen.handleInput("\x1bOQ"); // F2
+    screen.handleInput("\x1bOP"); // F1 returns to the shared practice page.
+    screen.handleInput("\r");
     screen.render(120);
     screen.handleInput("X");
     screen.handleInput("\x1bOR"); // F3
@@ -119,9 +122,9 @@ test("keyboard help preserves focus and async result errors do not steal editing
 test("inactive code pane has no fake cursor and F6 saves before entering coaching", async t => {
     const { screen, practice, store, resolved } = await fixture(t);
     practice.view.view = "problem";
-    assert.doesNotMatch(screen.render(120).slice(3).join("\n"), /\x1b\[7m/);
-    screen.handleInput("\x1bOQ");
-    assert.match(screen.render(120).slice(3).join("\n"), /\x1b\[7m/);
+    assert.doesNotMatch(screen.render(120).slice(4).join("\n"), /\x1b\[7m/);
+    screen.handleInput("\r");
+    assert.match(screen.render(120).slice(4).join("\n"), /\x1b\[7m/);
     screen.handleInput("// draft");
     screen.handleInput("\x1b[17~");
     await eventually(() => resolved() === "coach");
@@ -162,7 +165,7 @@ test("Tab indents code, Shift+Tab outdents safely, and F keys retain navigation"
     assert.equal((await store.read()).code, original, "outdent never deletes source text");
     screen.handleInput("\x1bOP"); screen.handleInput("\t");
     assert.equal(practice.view.view, "problem", "Tab is not a global page switch");
-    screen.handleInput("\x1bOS"); screen.render(80);
+    screen.handleInput("\x1bOS"); screen.handleInput("\r"); screen.render(80);
     screen.handleInput("\t"); screen.handleInput("note"); screen.handleInput("\x13");
     await eventually(() => !screen.dirty);
     assert.match((await store.read()).notes, /    note/);
@@ -185,9 +188,10 @@ test("core actions wrap completely, status stays separate, and selected tabs rem
             const commands = lines.slice(status + 1).join("\n");
             for (const key of ["Ctrl+S", "Ctrl+R", "Ctrl+T", "Ctrl+E", "Ctrl+H", "Ctrl+G", "F6", "F5", "Esc"])
                 assert.ok(commands.includes(key), `${key} missing at ${width} in ${view}`);
-            assert.match(lines[2]!, /\x1b\[7m/);
-            for (const key of ["F1", "F2", "F3", "F4"]) assert.ok(lines[2]!.includes(key));
-            assert.ok(lines[2]!.includes(`▸ F${["problem", "code", "results", "notes"].indexOf(view) + 1}`));
+            assert.doesNotMatch(lines[2]!, /\x1b\[7m|F2/); // Selected page is not keyboard focus.
+            for (const key of ["F1", "F3", "F4"]) assert.ok(lines[2]!.includes(key));
+            assert.ok(lines[2]!.includes(`● F${view === "results" ? 3 : view === "notes" ? 4 : 1}`));
+            assert.equal((lines[3]!.match(/\x1b\[7m/g) ?? []).length, 1, "only the active pane heading is filled");
         }
     }
 });
@@ -205,59 +209,160 @@ test("long code keeps the active caret visible above the wrapped action area", a
     assert.equal(lines.length, 16);
 });
 
-test("Esc enters tab navigation without saving, arrows do not edit, Enter restores code cursor", async t => {
-    const { screen, practice, store, resolved } = await fixture(t, 80, 24);
-    const original = practice.code;
-    practice.view.view = "code";
-    practice.view.cursor = { line: 0, col: 0 };
-    screen.render(80); screen.handleInput("X");
-    screen.handleInput("\x1b");
-    assert.equal(resolved(), undefined);
-    assert.equal((await store.read()).code, original, "first Esc does not save or leave");
-    assert.match(screen.render(80).join("\n"), /页签导航中/);
-    assert.doesNotMatch(screen.render(80).slice(3).join("\n"), /\x1b\[7m/);
-    screen.handleInput("ignored"); screen.handleInput("\t");
-    screen.handleInput("\x1b[C");
-    assert.equal(practice.view.view, "results");
-    screen.handleInput("\x1b[D");
-    screen.handleInput("\r"); screen.render(80);
-    screen.handleInput("Y");
-    screen.handleInput("\x1b"); screen.handleInput("\x1b");
-    await eventually(() => resolved() === "close");
-    assert.equal((await store.read()).code, "XY" + original);
-    assert.equal((await store.read()).view.view, "code");
+test("practice opens readable, Enter edits directly, Esc restores reading without saving, and the next Esc saves", async t => {
+    for (const width of [120, 80, 32]) {
+        const { screen, practice, store, resolved } = await fixture(t, width, 24);
+        const original = practice.code;
+        practice.view.cursor = { line: 0, col: 0 };
+        const bar = screen.render(width)[2];
+        screen.handleInput("\x1b[B"); // No Enter required to scroll the statement.
+        assert.equal(practice.view.problemOffset, 1);
+        screen.handleInput("\r"); screen.render(width);
+        assert.equal(practice.view.view, "code");
+        assert.equal(screen.dirty, false, "entering code must not insert a newline");
+        assert.equal(screen.render(width)[2], bar, "reading and editing share one page");
+        screen.handleInput("X"); screen.handleInput("\r"); screen.handleInput("Y");
+        screen.handleInput("\x1b");
+        assert.equal(resolved(), undefined);
+        assert.equal(practice.view.view, "problem");
+        assert.equal(practice.view.problemOffset, 1);
+        assert.equal((await store.read()).code, original, "first Esc does not save or leave");
+        assert.match(screen.render(width).join("\n"), /阅读中/);
+        assert.doesNotMatch(screen.render(width).slice(4).join("\n"), /\x1b\[7m/);
+        screen.handleInput("ignored"); screen.handleInput("\t");
+        screen.handleInput("\x1b[C"); screen.handleInput("\x1b[D");
+        assert.equal(practice.view.view, "problem", "left reverses the preceding right page switch");
+        screen.handleInput("\r"); screen.render(width);
+        screen.handleInput("Z");
+        screen.handleInput("\x1b"); screen.handleInput("\x1b");
+        await eventually(() => resolved() === "close");
+        assert.equal((await store.read()).code, "X\nYZ" + original, "editor cursor is retained across reading");
+        assert.equal((await store.read()).view.view, "problem");
+    }
 });
 
-test("tab navigation wraps, help restores its focus, and F keys jump directly into content", async t => {
-    const { screen, practice, tui } = await fixture(t);
-    screen.render(120); screen.handleInput("\x1b");
-    screen.handleInput("\x1b[D");
-    assert.equal(practice.view.view, "notes");
-    screen.handleInput("\x1b[C");
-    assert.equal(practice.view.view, "problem");
-    screen.handleInput("\x1b[15~"); screen.handleInput("\x1b");
-    assert.match(screen.render(120).join("\n"), /页签导航中/);
-    for (const [width, height] of [[120, 30], [80, 24], [32, 16]]) {
-        Object.assign(tui.terminal, { rows: height, columns: width });
-        const lines = screen.render(width!);
-        assert.equal(lines.length, height);
-        assert.ok(lines.every(line => visibleWidth(line) <= width!));
-        for (const key of ["Enter", "Esc", "←/→"]) assert.ok(lines.join("\n").includes(key));
+test("F keys and mouse pages need no enter layer; help restores reading or editing", async t => {
+    const { screen, practice } = await fixture(t);
+    screen.render(120);
+    for (const [key, view] of [["\x1bOP", "problem"], ["\x1bOR", "results"], ["\x1bOS", "notes"]] as const) {
+        screen.handleInput(key);
+        assert.equal(practice.view.view, view);
+        screen.handleInput("\x1b[15~");
+        assert.doesNotMatch(screen.render(120).join("\n"), /F2 代码|Enter 进入/);
+        screen.handleInput("\x1b");
+        assert.equal(practice.view.view, view);
+        if (view !== "problem") {
+            screen.handleInput("\x1b");
+            assert.equal(practice.view.view, "problem");
+        }
     }
-    screen.handleInput("\x1bOQ");
-    const text = screen.render(32).join("\n");
-    assert.doesNotMatch(text, /页签导航中/);
+    screen.handleInput("\r"); screen.render(120);
+    screen.handleInput("\x1b[15~"); screen.handleInput("\x1b");
     assert.equal(practice.view.view, "code");
+    assert.match(screen.render(120).join("\n"), /编辑代码/);
+});
+
+test("reading arrows cycle every page both ways without entering an editor", async t => {
+    const { screen, practice, tui } = await fixture(t);
+    for (const width of [120, 80, 32]) {
+        Object.assign(tui.terminal, { columns: width, rows: 24 });
+        screen.handleInput("\x1bOP"); screen.render(width);
+        for (const view of ["results", "notes", "problem", "results", "notes", "problem"] as const) {
+            screen.handleInput("\x1b[C");
+            assert.equal(practice.view.view, view);
+            const text = screen.render(width).join("\n");
+            assert.match(text, /←\/→ 切页/);
+            assert.equal(practice.view.notesEditing, false);
+            screen.handleInput("not an edit");
+            assert.equal(screen.dirty, false);
+        }
+        for (const view of ["notes", "results", "problem"] as const) {
+            screen.handleInput("\x1b[D");
+            assert.equal(practice.view.view, view);
+        }
+    }
+});
+
+test("notes have independent reading and editing states with draft, scroll, and cursor preservation", async t => {
+    const { practice, store, tui } = await fixture(t, 80, 24);
+    practice.notes = Array.from({ length: 30 }, (_, i) => `笔记 ${i}\n`).join("\n");
+    await store.save(practice, await store.read());
+    const screen = new Workbench(tui, theme, practice, store, "light", () => {});
+    screen.focused = true;
+    screen.handleInput("\x1bOS");
+    assert.match(screen.render(80).join("\n"), /笔记 · 阅读中/);
+    screen.handleInput("ignored"); screen.handleInput("\t");
+    assert.equal(screen.dirty, false);
+    screen.handleInput("\x1b[B");
+    assert.equal(practice.view.notesOffset, 1);
+    screen.handleInput("\r"); screen.render(80);
+    assert.equal(screen.dirty, false, "entering notes does not insert a newline");
+    screen.handleInput("AB"); screen.handleInput("\x1b[D"); screen.handleInput("X");
+    screen.handleInput("\x1b[C"); screen.handleInput("Y"); screen.handleInput("\r");
+    assert.equal(practice.view.view, "notes", "editing arrows must not switch pages");
+    screen.handleInput("\x1b");
+    assert.equal(practice.view.view, "notes", "Esc returns to this page, not the problem");
+    assert.equal(practice.view.notesEditing, false);
+    assert.equal(practice.view.notesOffset, 1);
+    assert.doesNotMatch(screen.render(80).slice(4).join("\n"), /\x1b\[7m/, "reading has no editor caret");
+    practice.view.notesOffset = 10000;
+    assert.match(screen.render(80).join("\n"), /AXBY/, "reading displays unsaved notes");
+    const offset = practice.view.notesOffset;
+    screen.handleInput("\x1b[C"); screen.handleInput("\x1b[D");
+    assert.equal(practice.view.notesOffset, offset, "page switching preserves reading position");
+    screen.handleInput("\r"); screen.render(80); screen.handleInput("Z");
+    screen.handleInput("\x1b[15~"); screen.handleInput("\x1b");
+    assert.equal(practice.view.notesEditing, true, "help returns to editing");
+    screen.handleInput("\x13");
+    await eventually(() => !screen.dirty);
+    const saved = await store.read();
+    assert.match(saved.notes, /AXBY\nZ/);
+    assert.equal(saved.view.notesEditing, true);
+    const returned = new Workbench(tui, theme, saved, store, "light", () => {});
+    returned.focused = true;
+    assert.match(returned.render(80).join("\n"), /笔记 · 编辑中/);
+    returned.handleInput("\x1b");
+    assert.equal(saved.view.view, "notes");
+    returned.handleInput("\x1b");
+    assert.equal(saved.view.view, "problem");
+});
+
+test("result arrows switch pages while Shift+arrows select bounded test cases", async t => {
+    const { screen, practice } = await fixture(t);
+    const record = {
+        source: "leetcode" as const, id: "fixture", kind: "run" as const, createdAt: "fixture", account: "fixture",
+        slug: "two-sum", code: practice.code, codeHash: "fixture", input: "[1]", inputs: ["[1]", "[2]"],
+        state: "complete" as const, message: "完成", result: { verdict: "样例通过" },
+    };
+    screen.setExecution(record);
+    screen.handleInput("\x1bOR");
+    for (const [key, index] of [["\x1b[1;2C", 1], ["\x1b[1;2C", 1], ["\x1b[1;2D", 0], ["\x1b[1;2D", 0]] as const) {
+        screen.handleInput(key);
+        assert.equal(practice.view.view, "results");
+        assert.equal(practice.view.caseIndex, index);
+    }
+    screen.handleInput("\r");
+    assert.equal(practice.view.view, "results", "Enter on results does not start editing");
+    assert.match(screen.render(120).join("\n"), /Shift\+←\/→/);
+    screen.handleInput("\x1b[C");
+    assert.equal(practice.view.view, "notes");
+    assert.equal(practice.view.caseIndex, 0);
+    for (const state of ["pending", "unknown", "failed", "complete"] as const) {
+        screen.setExecution({ ...record, state });
+        assert.equal(practice.view.view, "notes", "background updates do not steal focus");
+        screen.handleInput("\x1bOR");
+        assert.doesNotMatch(screen.render(120).join("\n"), /F2/);
+        screen.handleInput("\x1b[C");
+    }
 });
 
 test("mouse tabs use rendered cell bounds after resize and ignore non-tab or modal clicks", async t => {
     const { screen, practice, tui } = await fixture(t);
     for (const width of [120, 80, 32]) {
         Object.assign(tui.terminal, { columns: width });
-        for (const [i, view] of (["problem", "code", "results", "notes"] as const).entries()) {
-            screen.handleInput("\x1b"); // Start from tab navigation; clicking should enter content.
+        for (const [key, view] of [["F1", "problem"], ["F3", "results"], ["F4", "notes"]] as const) {
             const bar = screen.render(width)[2]!.replace(/\x1b\[[0-9;]*m/g, "");
-            const x = visibleWidth(bar.slice(0, bar.indexOf(`F${i + 1}`)));
+            const x = visibleWidth(bar.slice(0, bar.indexOf(key)));
             const event = { type: "press" as const, button: "left" as const, x, y: 2, screenX: x + 40, screenY: 12,
                 width, height: tui.terminal.rows, shift: false, alt: false, ctrl: false };
             assert.deepEqual(screen.handleMouse(event), { handled: true, focus: true });
@@ -328,6 +433,26 @@ test("original-link hit regions follow scrolling, wrapping and split panes; one 
         practice.view.view = "results"; screen.render(width);
         assert.equal(screen.handleMouse({ ...event, y }), undefined, "hidden statement has no stale hit region");
         screen.dispose();
+    }
+});
+
+test("a real problem retains editable content and all actions at the minimum viewport", async t => {
+    const { store, practice, tui } = await fixture(t, 32, 16);
+    const workspace = new Workspace(store.home, { ...store.problem, source: "leetcode" });
+    const screen = new Workbench(tui, theme, practice, workspace, "light", () => {});
+    screen.focused = true;
+    for (const view of ["problem", "code", "results", "notes"] as const) {
+        practice.view.view = view;
+        practice.view.notesEditing = view === "notes";
+        const lines = screen.render(32);
+        assert.equal(lines.length, 16);
+        assert.ok(lines.every(line => visibleWidth(line) <= 32));
+        const bottom = lines.findIndex(line => line.startsWith("╰"));
+        assert.ok(bottom > 4, `at least one content row in ${view}`);
+        if (view === "code" || view === "notes")
+            assert.match(lines.slice(4, bottom).join("\n"), /\x1b\[7m/, "editing caret is visible");
+        for (const label of ["F7 去leetcode查看原题", "F8 选题", "Esc", "Ctrl+S", "Ctrl+R", "Ctrl+T"])
+            assert.ok(lines.join("\n").includes(label), `${label} is visible in ${view}`);
     }
 });
 

@@ -57,12 +57,15 @@ try {
     await store.initialize();
     const practice = await store.open();
     await mkdir("docs/images", { recursive: true });
-    for (const [name, width, height] of [["workbench-wide", 120, 30], ["workbench-narrow", 80, 24], ["workbench-large", 153, 51], ["workbench-navigation", 80, 24]] as const) {
-        practice.view.view = width >= 100 ? "code" : "problem";
+    for (const [name, width, height] of [["workbench-wide", 120, 30], ["workbench-narrow", 80, 24], ["workbench-large", 153, 51], ["workbench-navigation", 80, 24], ["workbench-code-narrow", 32, 16], ["workbench-reading-wide", 153, 51], ["workbench-notes-reading", 80, 24], ["workbench-results-small", 32, 16]] as const) {
+        practice.view.view = width >= 100 || name === "workbench-code-narrow" ? "code" : "problem";
         const tui = { terminal: { rows: height, columns: width }, requestRender() { } } as unknown as TUI;
         const screen = new Workbench(tui, theme, practice, store, "light", () => { });
         screen.focused = true;
-        if (name === "workbench-navigation") screen.handleInput("\x1b");
+        // The former tab-navigation snapshot now shows directly usable reading content.
+        if (name === "workbench-reading-wide") screen.handleInput("\x1bOP");
+        if (name === "workbench-notes-reading") screen.handleInput("\x1bOS");
+        if (name === "workbench-results-small") screen.handleInput("\x1bOR");
         await writeSvg(name, width, height, "组件渲染快照", screen.render(width));
         screen.dispose();
     }
@@ -85,11 +88,18 @@ try {
         return { items: matched.slice(skip, skip + 20), total: matched.length };
     };
     const status = { get: (slug: string) => slug === "two-sum" ? "accepted" as const : slug === "15" ? "started" as const : "none" as const };
-    for (const [name, width, height] of [["problem-picker", 120, 30], ["problem-picker-narrow", 80, 24]] as const) {
+    for (const [name, width, height] of [["problem-picker", 120, 30], ["problem-picker-narrow", 80, 24], ["problem-picker-filters", 80, 24], ["problem-picker-filters-small", 32, 16], ["problem-picker-list", 80, 24]] as const) {
         const tui = { terminal: { rows: height, columns: width }, requestRender() { } } as unknown as TUI;
         const picker = new ProblemPicker(tui, theme, { search, status, debounceMs: 0 }, () => { });
         picker.focused = true;
         await new Promise(resolve => setTimeout(resolve, 20));
+        if (name.includes("filters")) {
+            picker.handleInput("\t");
+            picker.handleInput("\x1b[C");
+            picker.handleInput("\r");
+            await new Promise(resolve => setTimeout(resolve, 20));
+            picker.handleInput("\x1b[C"); // Applied 简单 and focused 中等 must look different.
+        } else if (name.endsWith("list")) picker.handleInput("\x1b[B");
         await writeSvg(name, width, height, "选题界面渲染快照", picker.render(width));
         picker.dispose();
     }

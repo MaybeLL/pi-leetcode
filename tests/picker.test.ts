@@ -46,8 +46,9 @@ async function eventually(predicate: () => boolean | Promise<boolean>, label = "
 }
 
 function columnOf(line: string, text: string): number {
-    const index = line.indexOf(text);
-    return index < 0 ? -1 : visibleWidth(line.slice(0, index));
+    const plain = line.replace(/\x1b\[[0-9;]*m/g, "");
+    const index = plain.indexOf(text);
+    return index < 0 ? -1 : visibleWidth(plain.slice(0, index));
 }
 
 test("catalog pages sequentially without duplicates and reports page boundaries", async () => {
@@ -224,11 +225,13 @@ test("mouse can click chips, select a row, and confirm the open button", async (
     const { screen, opened } = createPicker(catalogSearch(items, calls));
     await eventually(() => screen.entries.length === 6, "initial list");
     let lines = screen.render(80);
-    const chipY = lines.findIndex(line => line.includes("[仅免费]"));
-    const chipX = columnOf(lines[chipY]!, "[仅免费]");
+    const chipY = lines.findIndex(line => line.includes("[ 仅免费]"));
+    const chipX = columnOf(lines[chipY]!, "[ 仅免费]");
     screen.handleMouse({ type: "click", button: "left", x: chipX + 1, y: chipY, screenX: chipX + 1, screenY: chipY, width: 80, height: 24, shift: false, alt: false, ctrl: false });
     await eventually(() => !screen.isLoading && screen.entries.length > 0 && screen.entries.every(entry => !entry.summary.paid), "free-only rows");
     assert.ok(screen.entries.length > 0);
+    assert.equal(screen.focusedArea, "filters", "mouse chips move keyboard focus too");
+    assert.match(screen.render(80).join("\n"), /\x1b\[7m▸\[✓仅免费\]/);
     lines = screen.render(80);
     const rowY = lines.findIndex(line => line.includes("题目 2 "));
     assert.ok(rowY >= 0);
@@ -246,6 +249,32 @@ test("mouse can click chips, select a row, and confirm the open button", async (
     assert.equal(opened.length, 1);
 });
 
+test("wrapped filter mouse targets follow resize and retain the matching keyboard focus", async () => {
+    const { screen, tui } = createPicker(catalogSearch([
+        summary(1, "免费题", "Easy"), summary(2, "会员题", "Easy", true),
+    ]));
+    await eventually(() => !screen.isLoading);
+    for (const width of [32, 80, 40]) {
+        Object.assign(tui.terminal, { columns: width });
+        const lines = screen.render(width);
+        const y = lines.findIndex(line => line.includes("仅免费]"));
+        const x = columnOf(lines[y]!, "仅免费");
+        const event = { type: "click" as const, button: "left" as const, x, y, screenX: x, screenY: y,
+            width, height: 24, shift: false, alt: false, ctrl: false };
+        assert.equal(screen.handleMouse({ ...event, width: width + 1 }), undefined);
+        assert.equal(screen.handleMouse(event)?.handled, true);
+        await eventually(() => !screen.isLoading);
+        assert.equal(screen.focusedArea, "filters");
+        assert.match(screen.render(width).join("\n"), /\x1b\[7m▸\[✓仅免费\]/);
+        assert.equal(screen.entries.length, 1);
+        screen.handleInput("\x1b[D"); // The next keyboard action starts at the clicked chip.
+        screen.handleInput("\r");
+        await eventually(() => !screen.isLoading);
+        assert.equal(screen.entries.length, 2);
+    }
+    screen.dispose();
+});
+
 test("escape cancels without opening, and narrow terminals stay usable", async () => {
     const items = [summary(1, "两数之和", "Easy", false), summary(2, "两数相加", "Medium", true)];
     const { screen, opened } = createPicker(catalogSearch(items), { width: 32, height: 16 });
@@ -260,6 +289,61 @@ test("escape cancels without opening, and narrow terminals stay usable", async (
     assert.match(rendered, /取消/);
     screen.handleInput("\x1b");
     assert.equal(opened.length, 0, "cancel opens nothing");
+});
+
+test("focus is distinct from applied filters and remembered selection, including narrow layouts", async () => {
+    const { screen, tui } = createPicker(catalogSearch([summary(121, "买卖股票的最佳时机")]));
+    await eventually(() => !screen.isLoading);
+    for (const width of [153, 80, 40, 32]) {
+        Object.assign(tui.terminal, { columns: width, rows: 16 });
+        let lines = screen.render(width);
+        assert.match(lines[0]!, /\x1b\[7m▸ 搜索/);
+        assert.match(lines.join("\n"), /● 121/);
+        assert.match(lines.join("\n"), /当前：搜索/);
+        screen.handleInput("\t");
+        for (let index = 0; index < 6; index++) {
+            lines = screen.render(width);
+            const text = lines.join("\n");
+            assert.equal((text.match(/\x1b\[7m/g) ?? []).length, 1, "one filled focus target; no inactive input caret");
+            assert.match(text, /\x1b\[7m▸\[/);
+            assert.match(text, /当前：筛选/);
+            assert.match(text, /Enter\/空格/);
+            for (const chip of ["[✓全部]", "[ 简单]", "[ 中等]", "[ 困难]", "[ 仅免费]"])
+                assert.ok(text.includes(chip), `${chip} remains reachable at ${width}`);
+            assert.ok(lines.length <= 16);
+            assert.ok(lines.every(line => visibleWidth(line) <= width));
+            assert.match(text, /Esc 取消/);
+            screen.handleInput("\x1b[C");
+        }
+        screen.handleInput("\t");
+        lines = screen.render(width);
+        assert.equal((lines.join("\n").match(/\x1b\[7m/g) ?? []).length, 1);
+        assert.match(lines.join("\n"), /\x1b\[7m▸ 121/);
+        const selected = lines.find(line => line.includes("▸ 121"))!;
+        assert.doesNotMatch(selected.split("\x1b[27m")[0]!, /\x1b\[0m/, "truncation must not clear the row highlight");
+        assert.match(lines.join("\n"), /当前：题目列表/);
+        assert.doesNotMatch(lines[0]!, /\x1b\[7m/);
+        screen.handleInput("\t"); // Search for the next size.
+    }
+    screen.dispose();
+});
+
+test("moving filter focus does not apply it until Enter, even during a pending load", async () => {
+    const calls: Call[] = [];
+    const { screen } = createPicker(catalogSearch([summary(121, "股票")], calls, 10));
+    await eventually(() => !screen.isLoading);
+    screen.handleInput("\t"); screen.handleInput("\x1b[C");
+    assert.equal(calls.length, 1);
+    assert.match(screen.render(80).join("\n"), /\x1b\[7m▸\[ 简单\]/);
+    screen.handleInput("\r");
+    assert.equal(screen.isLoading, true);
+    screen.handleInput("\x1b[C");
+    assert.match(screen.render(80).join("\n"), /\[✓简单\]/);
+    assert.match(screen.render(80).join("\n"), /\x1b\[7m▸\[ 中等\]/);
+    await eventually(() => !screen.isLoading);
+    assert.equal(screen.focusedArea, "filters");
+    assert.equal(calls.at(-1)!.difficulty, "EASY");
+    screen.dispose();
 });
 
 test("local status is attached to each row from the injected index", async () => {

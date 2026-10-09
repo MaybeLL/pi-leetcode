@@ -89,13 +89,15 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 (spelled out as “F7 去leetcode查看原题”) is the keyboard alternative. Browser launch failures show a copyable URL. F8 选题 opens the same problem browser as `/leet pick` from inside the workbench. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return, original problem, problem picker and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
+Problem and code share one **F1 做题** page, not separate tabs. Wide terminals show them side by side; narrow terminals show the focused content. Open the page to read and scroll immediately, press Enter to write code, and Esc to return to reading with the editor cursor preserved. In reading mode, Left/Right cycles through practice, results and notes, while Up/Down and PageUp/PageDown scroll the current content. Notes also open in reading mode: Enter edits and Esc returns to notes reading. Only the active pane has a filled inverse heading and ▸ marker; the selected page uses a quieter ● marker. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 (spelled out as “F7 去leetcode查看原题”) is the keyboard alternative. Browser launch failures show a copyable URL. F8 选题 opens the same problem browser as `/leet pick` from inside the workbench. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return, original problem, problem picker and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
-| Click a tab | Switch directly into that content pane (requires terminal mouse events). |
-| Esc, then Left / Right, then Enter | Focus the tab bar, select a page, enter its content. |
-| F1–F4 | Jump directly into problem, code, results, notes. |
+| Click a tab / F1 / F3 / F4 | Open practice / results / notes in reading mode; no separate tab-navigation layer. F2 is removed. Mouse clicks require terminal mouse events. |
+| Left / Right in reading mode | Cycle through practice, results and notes, wrapping at either end. |
+| Enter while reading the problem or notes | Start/resume code or notes editing without inserting a newline. |
+| Esc while editing code or notes | Return to reading that same page, without saving or stopping a background judge. |
+| Esc while reading results or notes | Return to reading the problem. |
 | Tab / Shift+Tab in code or notes | Insert four spaces / remove up to four leading spaces on the current line. |
 | Enter in code/notes | Insert a newline. |
 | Up / Down, PageUp / PageDown | Navigate focused content. |
@@ -107,19 +109,21 @@ Wide terminals split problem and code into labelled panes; a highlighted border 
 | Ctrl+P | Resume the saved judge job without resending. |
 | Ctrl+B | Open platform submission history. |
 | Ctrl+V | Open reflection and learning history. |
-| Left / Right in results | Select a test case. |
+| Shift+Left / Shift+Right in results | Select a test case; unmodified arrows still switch pages. |
 | d in results | Toggle technical execution details. |
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | F6 | Save and start/continue coaching in Pi, using the existing discussion. |
 | Click the original-problem link / F7 去leetcode查看原题 | Save and open the current problem in your browser; retain your workbench position. |
 | F8 选题 | Save the draft, notes and position, then open the problem browser. Cancelling restores the same problem, tab, cursor and reading position; confirming another problem keeps the original files. Selecting a problem you have practised before continues its newest practice (including later re-practice attempts); only `/leet restart` starts a blank attempt. |
 | Ctrl+G | Save and choose guidance. |
-| Esc in the tab bar | Save and return to Pi. During execution: stop waiting, not the remote job. |
+| Esc while reading the problem | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
 
-The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. The first Esc focuses the tab bar while judging continues; a second Esc saves, stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling. If a background judge finishes after you have switched problems with F8, its result is written only to the problem that started it.
+The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. Esc while editing returns to the same page's reading mode while judging continues. Esc from results or notes reading returns to problem reading; Esc from problem reading saves, stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling. If a background judge finishes after you have switched problems with F8, its result is written only to the problem that started it.
 
 ### Problem browser and local status
+
+The browser distinguishes focus from selection: the search label, focused filter or focused result row uses inverse bold with ▸; ✓ marks applied filters, and ● remembers the selected result when focus is elsewhere. An inactive search field has no fake caret. The footer describes the keys for the current area (search, filters or list); key/action pairs and filters wrap intact on narrow terminals. Clicking a filter also moves keyboard focus to it.
 
 Inside the browser, typing pauses for about 300 ms before searching; a pure number pins the exact question once at the front (removed from every later page, so paging never repeats it), and clearing the box returns to browsing under the current filters. A new search keeps the previous confirmed list on screen with a “搜索中” marker, and a late response from an older query or filter never replaces the current results. Rows on a not-yet-confirmed list are labelled as the previous result and cannot be opened until the current search settles. Loading, empty and failed states are shown in place, and a failed request offers a retry without losing the keyword or filters. With 仅免费, the browser keeps scanning past a page of member problems; if none is found within the scan window it offers 继续加载 instead of reporting no results.
 

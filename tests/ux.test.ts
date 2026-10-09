@@ -141,7 +141,7 @@ test("anonymous first entry, deferred login and background editing preserve the 
                     }
                     void (async () => {
                         await checking;
-                        screen.handleInput("\x1bOQ");
+                        screen.handleInput("\x1bOP"); screen.handleInput("\r");
                         screen.render(80);
                         screen.handleInput("// edited while judging\n");
                         screen.handleInput("\x13");
@@ -432,7 +432,7 @@ test("original-page action opens the canonical URL and restores drafts; failure 
             screen.render(80); screenCount++;
             try {
                 if (screenCount === 1) {
-                    screen.handleInput("\x1bOQ"); screen.render(80); screen.handleInput("// draft\n");
+                    screen.handleInput("\r"); screen.render(80); screen.handleInput("// draft\n");
                     screen.handleInput("\x1b[18~"); // F7
                 } else if (screenCount === 2) {
                     assert.equal(screen.practice.view.view, "code");
