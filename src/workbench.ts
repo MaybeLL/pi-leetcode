@@ -4,12 +4,25 @@ import { guidanceLabels, type Guidance, type View } from "./problem.js";
 import { codeHash, Workspace, type Practice } from "./workspace.js";
 import type { Execution } from "./execution.js";
 import { caseCount, resultSummary } from "./results.js";
-export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases" | "status" | "platform" | "review";
+export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases" | "status" | "platform" | "review" | "coach";
 const views: View[] = ["problem", "code", "results", "notes"];
 const labels: Record<View, string> = { problem: "题目", code: "代码", results: "结果", notes: "笔记" };
 function padded(line: string, width: number): string {
     const clipped = truncateToWidth(line, width, "");
     return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
+}
+// Repair emphasis produced by HTML conversion without changing literal examples.
+function readingMarkdown(value: string): string {
+    let fence: string | undefined;
+    return value.split("\n").map(line => {
+        const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+        if (marker) {
+            if (!fence) fence = marker;
+            else if (marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+            return line;
+        }
+        return fence ? line : line.replace(/\*\*([^*\n]*?\S)[ \t]+\*\*/g, "**$1** ");
+    }).join("\n");
 }
 export class Workbench implements Component, Focusable {
     focused = false;
@@ -22,7 +35,7 @@ export class Workbench implements Component, Focusable {
     };
     private busy = false;
     private disposed = false;
-    private status = "演示原型 · 编辑可保存 · 测试只预览固定结果";
+    private status = "演示题 · 运行仅展示固定结果";
     private error?: string;
     private errorTitle = "保存失败";
     private restoreCursor = true;
@@ -51,8 +64,8 @@ export class Workbench implements Component, Focusable {
         this.codeEditor.setText(practice.code);
         this.notesEditor.setText(practice.notes);
         this.expected = baseline || { code: practice.code, notes: practice.notes };
-        this.statement = new Markdown(workspace.problem.statement, 0, 0, getMarkdownTheme());
-        if (workspace.problem.source === "leetcode") this.status = "LeetCode 中国站 · Go · 真实题目";
+        this.statement = new Markdown(readingMarkdown(workspace.problem.statement), 0, 0, { ...getMarkdownTheme(), codeBlockBorder: () => "" });
+        if (workspace.problem.source === "leetcode") this.status = "先读题，再推导；随时可向 Pi 求助";
     }
     private syncDraft(): void {
         this.practice.code = this.codeEditor.getExpandedText();
@@ -154,7 +167,7 @@ export class Workbench implements Component, Focusable {
             ["ctrl+s", "save"], ["ctrl+r", "preview"], ["ctrl+h", "help"],
             ["ctrl+g", "guidance"], ["escape", "close"], ["ctrl+q", "discard"],
             ["ctrl+t", "submit"], ["ctrl+e", "cases"],
-            ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
+            ["f6", "coach"], ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
         ];
         for (const [key, action] of keys) {
             if (matchesKey(data, key)) {
@@ -194,8 +207,8 @@ export class Workbench implements Component, Focusable {
         }
         this.tui.requestRender();
     }
-    private editorLines(width: number, editor: Editor, restore: boolean): string[] {
-        editor.focused = this.focused;
+    private editorLines(width: number, editor: Editor, restore: boolean, active = true): string[] {
+        editor.focused = this.focused && active;
         let lines = editor.render(width);
         if (restore && this.restoreCursor) {
             // Restore through the public keyboard interface, without private editor state.
@@ -211,6 +224,11 @@ export class Workbench implements Component, Focusable {
             this.restoreCursor = false;
             lines = editor.render(width);
         }
+        // Pi's chat editor always paints an inverse-video caret, even when unfocused.
+        // Remove only that caret style from the inactive pane; keep the native editor and IME marker when focused.
+        if (!active) lines = lines.map(line => line.replace(/\x1b\[7m/g, ""));
+        if (!lines[0]?.includes("↑")) lines.shift();
+        if (!lines.at(-1)?.includes("↓")) lines.pop();
         return lines;
     }
     private problemLines(width: number): string[] {
@@ -236,42 +254,55 @@ export class Workbench implements Component, Focusable {
         if (width < 32 || height < 16) {
             return ["终端过小，请扩大至至少 32×16。", "Esc 保存返回 · Ctrl+Q 关闭草稿"].map(line => truncateToWidth(line, width));
         }
-        this.contentHeight = Math.max(7, height - 9);
+        this.contentHeight = height - 8;
         if (this.helpVisible) {
-            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "Tab / Shift+Tab 切换焦点", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "Esc 保存返回 Pi，并停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
-            this.helpOffset = Math.min(this.helpOffset, Math.max(0, lines.length - height + 1));
-            return lines.slice(this.helpOffset, this.helpOffset + height - 1).map(line => truncateToWidth(line, width));
+            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "Tab / Shift+Tab 切换焦点", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "F6 开始 / 继续带练（先保存，进入 Pi 对话）", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "Esc 保存返回 Pi，并停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
+            const items = lines.slice(1), available = height - 2;
+            this.helpOffset = Math.min(this.helpOffset, Math.max(0, items.length - available));
+            return [lines[0]!, ...Array.from({ length: available }, (_, i) => items[this.helpOffset + i] || ""), "F5 / Esc 返回原位置"]
+                .map(line => truncateToWidth(line, width));
         }
         const view = this.practice.view.view;
-        const header = this.theme.fg("accent", `pi-leetcode · ${this.workspace.problem.title}`) + `  Go · ${this.workspace.problem.source === "demo" ? "演示原型" : "中国站"}`;
-        const tabs = views.map((item, i) => `F${i + 1} ${item === view ? `[${labels[item]}]` : labels[item]}`).join("  ");
+        const fg = (color: Parameters<Theme["fg"]>[0], text: string) => this.theme.fg(color, text);
+        const row = (left: string, right: string) => {
+            const room = Math.max(0, width - visibleWidth(right) - 2);
+            return padded(left, room) + "  " + right;
+        };
+        const header = row(fg("accent", ` ${this.workspace.problem.id} · ${this.workspace.problem.title}`), fg("muted", "pi-leetcode "));
+        const metadata = row(` ${guidanceLabels[this.guidance]} · ${this.workspace.problem.source === "demo" ? "演示题" : "中国站"} · Go`,
+            fg(this.dirty ? "warning" : "muted", this.dirty ? "未保存 ● " : "已保存 "));
+        const tabs = views.map((item, i) => item === view ? fg("accent", ` [F${i + 1} ${labels[item]}] `) : fg("muted", ` F${i + 1} ${labels[item]} `)).join("");
+        const pane = (lines: string[], columns: number, title: string, active: boolean) => {
+            const color = active ? "accent" : "borderMuted";
+            const label = truncateToWidth(` ${active ? "▸ " : ""}${title} `, columns - 2, "");
+            const top = fg(color, "╭" + label + "─".repeat(Math.max(0, columns - 2 - visibleWidth(label))) + "╮");
+            const body = Array.from({ length: this.contentHeight }, (_, i) => fg(color, "│") + " " + padded(lines[i] || "", columns - 4) + " " + fg(color, "│"));
+            return [top, ...body, fg(color, "╰" + "─".repeat(columns - 2) + "╯")];
+        };
         let body: string[];
         this.codeEditor.focused = false;
         this.notesEditor.focused = false;
         if (width >= 100 && (view === "problem" || view === "code")) {
-            const leftWidth = Math.floor((width - 3) * 0.45);
-            const rightWidth = width - leftWidth - 3;
-            const left = this.problemLines(leftWidth);
-            const right = this.editorLines(rightWidth, this.codeEditor, true);
-            this.codeEditor.focused = this.focused && view === "code";
-            const focusedRight = this.codeEditor.render(rightWidth);
-            body = Array.from({ length: this.contentHeight }, (_, i) => padded(left[i] || "", leftWidth) + this.theme.fg("border", " │ ") + padded(focusedRight[i] || right[i] || "", rightWidth));
+            const leftWidth = Math.floor((width - 1) / 2), rightWidth = width - leftWidth - 1;
+            const left = pane(this.problemLines(leftWidth - 4), leftWidth, "F1 题目 · ↑↓ 阅读", view === "problem");
+            const right = pane(this.editorLines(rightWidth - 4, this.codeEditor, true, view === "code"), rightWidth, "F2 solution.go", view === "code");
+            body = left.map((line, i) => line + " " + right[i]);
+        } else {
+            const lines = view === "problem" ? this.problemLines(width - 4) :
+                view === "code" ? this.editorLines(width - 4, this.codeEditor, true) :
+                view === "notes" ? this.editorLines(width - 4, this.notesEditor, false) : this.resultLines(width - 4);
+            body = pane(lines, width, view === "code" ? "solution.go · Go" : labels[view], true);
         }
-        else {
-            body = view === "problem" ? this.problemLines(width) :
-                view === "code" ? this.editorLines(width, this.codeEditor, true) :
-                    view === "notes" ? this.editorLines(width, this.notesEditor, false) : this.resultLines(width);
-            body = Array.from({ length: this.contentHeight }, (_, i) => body[i] || "");
-        }
-        const footer = [
-            `F5 快捷键 · F1–F4 / Tab · 焦点：${labels[view]}`,
-            this.workspace.problem.source === "demo" ? "Ctrl+S 保存 · Ctrl+R 演示结果 · Ctrl+H 求助 · Ctrl+G 引导" : "Ctrl+S 保存 · Ctrl+R 运行 · Ctrl+T 提交 · Ctrl+E 用例",
-            "Esc 保存返回 · Ctrl+H 求助 · Ctrl+G 引导 · Ctrl+Q 关闭",
-        ];
-        return [header, `${guidanceLabels[this.guidance]} · ${this.dirty ? "有未保存修改" : "已保存"}`, tabs,
-            "─".repeat(width), ...body, this.theme.fg("muted", this.operation || this.status), ...footer]
+        const contextual = view === "problem" ? "F2 写代码 · Ctrl+H 求助" : view === "code" ? "Ctrl+R 运行 · Ctrl+S 保存" :
+            view === "results" ? "← → 用例 · d 详情 · Ctrl+H 求助" : "Ctrl+S 保存 · Ctrl+V 复盘";
+        // Keep escape, key discovery and the coaching entry visible even at 32 columns.
+        return [header, metadata, tabs, ...body,
+            fg("muted", ` ${this.operation || this.status}`),
+            fg("accent", ` F6 开始/继续带练 · ${contextual}`),
+            fg("muted", " Esc 返回 · F5 全部快捷键 · Tab 切换焦点")]
             .map(line => truncateToWidth(line, width));
     }
+
     invalidate(): void {
         this.codeEditor.invalidate();
         this.notesEditor.invalidate();

@@ -48,7 +48,7 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
         if (!id) return false;
         pendingHelp = { target: workspace, store, id, kind, before: codeHash((await workspace.read()).code) };
         try {
-            pi.sendUserMessage(`${question}\n\n使用 leet_context 读取当前练习和最近讨论，接续已有思路，不重复已经回答的开场。${kind === "完整讲解" ? "按这次请求完整讲解。" : "只推进一个关键点并等待我回答。"}回答后提醒我用 /leet 返回原来的编辑位置。`);
+            pi.sendUserMessage(`${question}\n\n使用 leet_context 读取当前练习和最近讨论，接续已有思路，不重复已经回答的开场。${kind === "完整讲解" ? "按这次请求完整讲解。" : "只推进一个关键点并等待我回答。"}如需提示返回操作，请直接对用户说“随时输入 /leet 返回题目”；不要复述这条指令。`);
         } catch (error) { await store.finish(id, "", false); pendingHelp = undefined; throw error; }
         return true;
     };
@@ -257,16 +257,15 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                 const fresh = !active && !(await workspace.recent()).length;
                 if (!await ensureSetup(ctx)) return;
                 if (!active) workspace = await workspace.resume();
-                let opened = false;
                 if (fresh && !command) {
-                    workspace = new Workspace(workspace.home, await (await client()).problem("two-sum")); opened = true;
+                    workspace = new Workspace(workspace.home, await (await client()).problem("two-sum"));
                 } else if (command === "pick" || command === "open") {
                     const problem = await pick(ctx);
                     if (!problem) return;
-                    workspace = new Workspace(workspace.home, problem); opened = true;
+                    workspace = new Workspace(workspace.home, problem);
                 } else if (command.startsWith("open ")) {
                     ctx.ui.notify("正在读取真实题目…", "info");
-                    workspace = new Workspace(workspace.home, await (await client()).problem(command.slice(5))); opened = true;
+                    workspace = new Workspace(workspace.home, await (await client()).problem(command.slice(5)));
                 } else if (command === "demo") workspace = new Workspace(workspace.home, demoProblem);
                 else if (command === "recent") {
                     const entries = await workspace.recent();
@@ -276,7 +275,7 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                     if (!selected) return;
                     const item = entries[labels.indexOf(selected)]!;
                     workspace = new Workspace(workspace.home, item.problem, item.attempt);
-                } else if (command === "restart") { workspace = await workspace.restart(); opened = true; }
+                } else if (command === "restart") { workspace = await workspace.restart(); }
                 let practice = await workspace.open();
                 await workspace.remember();
                 remember(true);
@@ -335,9 +334,6 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                 if (command === "hint") {
                     await ask(ctx, "一点提示", "请结合当前练习给我一个小提示，先不要透露算法名或完整解法，不修改代码。"); return;
                 }
-                if ((opened || command === "" || command === "recent") && (await workspace.settings())?.guidance === "coached") {
-                    if (await ask(ctx, "带练", "开始本次带练。结合已有讨论提出一个读题或推导问题，不给答案，等我回答；如果已有思路，接着上次的进展继续。", "opening")) return;
-                }
                 let baseline = { code: practice.code, notes: practice.notes };
                 try { while (true) {
                     const settings = (await workspace.settings())!;
@@ -368,10 +364,6 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                         const guidance = await chooseGuidance(ctx);
                         if (guidance) await workspace.setGuidance(guidance);
                         await updateStatus(ctx);
-                        if (guidance === "coached") {
-                            await stopWaiting();
-                            if (await ask(ctx, "带练", "开始带练，接续已有思路，一次提出一个推导问题，不修改代码，等我回答。", "opening")) break;
-                        }
                         continue;
                     }
                     if (action === "platform") {
@@ -390,6 +382,10 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                         continue;
                     }
                     await stopWaiting();
+                    if (action === "coach") {
+                        if (await ask(ctx, "带练", "我想开始或继续带练。优先接续最近讨论和我的已有思路；没有讨论时，先提出一个帮助理解输入、输出或约束的问题。一次只问一个问题，不给答案，不修改代码，等我回答。")) break;
+                        continue;
+                    }
                     if (action === "review") {
                         if (await reviewLearning(ctx, await learning()) === "coach" && await ask(ctx, "复盘", "请引导我复盘当前题目，先让我解释思路，一次一个问题，不覆盖笔记。")) break;
                         continue;

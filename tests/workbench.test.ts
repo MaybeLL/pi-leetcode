@@ -33,12 +33,15 @@ async function eventually(predicate: () => boolean | Promise<boolean>): Promise<
 }
 test("wide and narrow Chinese layouts fit the terminal and retain visible navigation", async (t) => {
     const { screen, tui } = await fixture(t);
-    for (const [width, height] of [[120, 30], [80, 24], [40, 16]]) {
+    for (const [width, height] of [[153, 51], [120, 30], [80, 24], [40, 16], [32, 16]]) {
         Object.assign(tui.terminal, { rows: height, columns: width });
         const lines = screen.render(width!);
         assert.ok(lines.length <= height!, `${lines.length} exceeds ${height}`);
         assert.ok(lines.every(line => visibleWidth(line) <= width!));
         assert.match(lines.join("\n"), /Esc/);
+        assert.match(lines.join("\n"), /F5/);
+        assert.match(lines.join("\n"), /F6/);
+        assert.equal(lines.length, height, "overlay covers underlying Pi footer");
     }
 });
 test("typing and Enter edit code, save before help, and restore the cursor on return", async (t) => {
@@ -110,4 +113,30 @@ test("keyboard help preserves focus and async result errors do not steal editing
     assert.equal(screen.dirty, true);
     screen.handleInput("\x1bOR");
     assert.match(screen.render(80).join("\n"), /连接失败/);
+});
+
+
+test("inactive code pane has no fake cursor and F6 saves before entering coaching", async t => {
+    const { screen, practice, store, resolved } = await fixture(t);
+    practice.view.view = "problem";
+    assert.doesNotMatch(screen.render(120).join("\n"), /\x1b\[7m/);
+    screen.handleInput("\x1bOQ");
+    assert.match(screen.render(120).join("\n"), /\x1b\[7m/);
+    screen.handleInput("// draft");
+    screen.handleInput("\x1b[17~");
+    await eventually(() => resolved() === "coach");
+    assert.match((await store.read()).code, /draft/);
+    assert.equal((await store.read()).view.view, "code");
+});
+
+test("problem examples render without fence syntax while literal example content survives", async t => {
+    const { store, practice, tui } = await fixture(t, 80, 24);
+    const problem = { ...store.problem, statement: "# 示例\n\n```text\n输入：[2,7]\n输出：[0,1]\n字面量：**原样 **\n```\n\n**进阶： **继续思考" };
+    const workspace = new Workspace(store.home, problem);
+    const screen = new Workbench(tui, theme, practice, workspace, "light", () => {});
+    const text = screen.render(80).join("\n");
+    assert.doesNotMatch(text, /```|\*\*进阶/);
+    assert.ok(text.includes("字面量：**原样 **"));
+    assert.ok(text.includes("输入：[2,7]"));
+    assert.ok(text.includes("输出：[0,1]"));
 });

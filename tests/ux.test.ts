@@ -266,7 +266,7 @@ test("throttled sends enter a local cooldown and never auto-retry", async (t) =>
     assert.equal(JSON.parse(await readFile(join(root, "cooldown.json"), "utf8")).account, "account");
 });
 
-test("coached entry asks once, saves the response and returns without repeating the opening", async (t) => {
+test("coached practice opens UI first and only explicit coaching enters the conversation", async (t) => {
     const f = await fixture(t, () => ({
         id: "fixture",
         async account() {
@@ -287,6 +287,7 @@ test("coached entry asks once, saves the response and returns without repeating 
     }));
     await new Workspace(f.home).initialize("coached");
     let screens = 0;
+    let action = "\x1b";
     const ctx: any = {
         mode: "tui",
         model: { id: "fixture-model" },
@@ -294,6 +295,7 @@ test("coached entry asks once, saves the response and returns without repeating 
         async waitForIdle() {},
         ui: {
             setWidget() {},
+            async select() { action = "\x1b"; return "逐步带练"; },
             notify(message: string, kind: string) {
                 if (kind === "error") assert.fail(message);
             },
@@ -302,28 +304,36 @@ test("coached entry asks once, saves the response and returns without repeating 
                 return new Promise((done) => {
                     const screen = factory(tui, theme, undefined, done);
                     screen.render(80);
-                    screen.handleInput("\x1b");
+                    screen.handleInput(action);
                 });
             },
         },
     };
     await f.command.handler("open 1", ctx);
-    assert.equal(f.messages.length, 1);
-    assert.equal(screens, 0);
-    await f.events.get("agent_end")(
-        { messages: [{ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "请你用自己的话说说输入与输出。" }] }] },
-        ctx,
-    );
+    assert.equal(f.messages.length, 0, "read the problem before any model request");
+    assert.equal(screens, 1);
+    action = "\x07"; // Changing guidance must also stay in the workbench.
+    await f.command.handler("", ctx);
+    assert.equal(f.messages.length, 0);
+    action = "\x1b[17~"; // F6: explicit coaching
     await f.command.handler("", ctx);
     assert.equal(f.messages.length, 1);
-    assert.equal(screens, 1);
+    assert.doesNotMatch(f.messages[0]!, /回答后提醒我/);
+    await f.events.get("agent_end")(
+        { messages: [{ role: "assistant", stopReason: "stop", content: [{ type: "text", text: "请你用自己的话说说输入与输出。" }] }] }, ctx,
+    );
+    action = "\x1b";
+    await f.command.handler("", ctx);
     await f.command.handler("open 1", ctx);
-    assert.equal(f.messages.length, 1);
-    assert.equal(screens, 2);
+    assert.equal(f.messages.length, 1, "reopening never starts a new coaching request");
     const context = await f.tools.get("leet_context").execute("id", {});
     assert.match(context.content[0].text, /请你用自己的话/);
+    action = "\x1b[17~";
+    await f.command.handler("", ctx);
+    assert.equal(f.messages.length, 2, "manual continue can resume the discussion");
+    action = "\x1b";
     await f.command.handler("restart", ctx);
-    assert.equal(f.messages.length, 2, "fresh attempt can start new coaching");
+    assert.equal(f.messages.length, 2, "fresh attempt opens a workbench first too");
 });
 test("repeated queries of the same completed result do not repeat proactive coaching", async (t) => {
     const f = await fixture(t, () => ({

@@ -89,7 +89,7 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Wide terminals split problem and code; narrow terminals switch views. The editor provides basic text editing, without IDE completion.
+Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The footer shows contextual actions and F6 coaching; F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
@@ -107,6 +107,7 @@ Wide terminals split problem and code; narrow terminals switch views. The editor
 | Left / Right in results | Select a test case. |
 | d in results | Toggle technical execution details. |
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
+| F6 | Save and start/continue coaching in Pi, using the existing discussion. |
 | Ctrl+G | Save and choose guidance. |
 | Esc | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
@@ -119,7 +120,7 @@ Results retain the exact submitted code and inputs. Editing afterwards marks the
 
 Three guidance levels share one workflow: independent, light (default), and coached. A one-off help request never changes the level. Help requires a configured Pi model; reading/editing/judging do not.
 
-Coached guidance asks one opening question per attempt; independent guidance stays quiet. Light/coached guidance offers an observation after a new completed result when returning to Pi. Reopening or querying the same result does not repeat it. It never interrupts editing or reacts to silence.
+Every guidance level opens the workbench first. F6 explicitly starts or continues coaching in the Pi conversation, after saving your draft; changing guidance also stays in the workbench. Independent guidance stays quiet until you ask. Light/coached guidance offers an observation after a new completed result when returning to Pi. Reopening or querying the same result does not repeat it. It never interrupts editing or reacts to silence.
 
 Ctrl+H offers problem explanation, thought checking, a small hint, selected-case analysis, full explanation, and free-form requests. Problem-only help excludes your solution and results from `leet_context`. Return with `/leet` to the saved position; Ctrl+Alt+L fills that command when the chat editor is empty.
 

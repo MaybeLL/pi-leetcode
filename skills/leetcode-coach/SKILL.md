@@ -23,4 +23,4 @@ For real problems, distinguish selected-case success from formal Accepted. Missi
 
 During review, discuss reasoning, correctness, complexity and a variation. Accepted alone does not establish mastery. Preserve user notes and ask before replacing their conclusions.
 
-After help, the user can run `/leet` to return to the workbench. Do not trigger repeated coaching while the learner is silently thinking.
+`/leet` opens the workbench in every guidance level. F6 is the explicit start/continue coaching action; changing guidance does not start a conversation. After help, the user can run `/leet` to return to the workbench. If useful, state this directly as “随时输入 /leet 返回题目”; do not repeat an instruction asking the user to remind themselves. Do not trigger repeated coaching while the learner is silently thinking.
