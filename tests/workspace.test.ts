@@ -131,3 +131,34 @@ test("copying a practice library preserves old files and refuses nonempty or nes
     await assert.rejects(store.copyToDirectory(settings.workspace), { code: "EEXIST" });
     assert.equal((await store.settings())?.workspace, destination);
 });
+
+test("reopening a problem continues its newest practice across switching and restarts", async (t) => {
+    const { store } = await fixture(t);
+    await store.initialize();
+    const problemA = { ...store.problem, source: "leetcode" as const, id: "1", questionId: "1", slug: "two-sum" };
+    const a = new Workspace(store.home, problemA);
+    const first = await a.open();
+    await a.save({ ...first, code: first.code + "// 第一次练习\n" }, { code: first.code, notes: first.notes });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const attempt = await a.restart();
+    const attemptPractice = await attempt.read();
+    await attempt.save({ ...attemptPractice, code: attemptPractice.code + "// 重新练习\n" }, { code: attemptPractice.code, notes: attemptPractice.notes });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    // Practise a different problem, then come back to the first one.
+    const other = new Workspace(store.home, { ...problemA, id: "15", slug: "three-sum", title: "三数之和" });
+    await other.open();
+    const back = new Workspace(store.home, problemA);
+    assert.equal(await back.latestPractice(), attempt.attempt, "the newest attempt is chosen, not the first practice");
+    const resumed = new Workspace(store.home, problemA, await back.latestPractice());
+    assert.match((await resumed.read()).code, /重新练习/);
+    // A Pi restart restores the attempt recorded in last-problem.json.
+    const persisted = await store.resume();
+    assert.equal(persisted.attempt, attempt.attempt);
+    // Editing the first practice again makes it the newest, and the attempt is retained.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const current = await new Workspace(store.home, problemA).read();
+    await new Workspace(store.home, problemA).save({ ...current, code: current.code + "// 更新首次练习\n" }, { code: current.code, notes: current.notes });
+    assert.equal(await new Workspace(store.home, problemA).latestPractice(), "current");
+    const attemptDirectory = await attempt.problemDirectory();
+    assert.match(await readFile(join(attemptDirectory, "solution.go"), "utf8"), /重新练习/, "older attempts are never overwritten");
+});

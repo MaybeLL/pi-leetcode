@@ -17,6 +17,8 @@ import { LearningStore, learningSummary, helpKinds, type HelpKind } from "../src
 import { chooseHelp, reviewLearning } from "../src/learning-ui.js";
 import { editCases as editCaseInputs } from "../src/cases-ui.js";
 import { Executions, executionMarkdown, type Execution } from "../src/execution.js";
+import { openProblemPicker } from "../src/picker-ui.js";
+import { localStatusIndex } from "../src/local-status.js";
 const levels: Guidance[] = ["light", "independent", "coached"];
 export default function (pi: ExtensionAPI, backendFactory: BackendFactory = createBackend): void {
     let workspace = new Workspace();
@@ -209,26 +211,21 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
             return { content: [{ type: "text", text: `引导程度已调整为${guidanceLabels[params.level]}。` }], details: { guidance: params.level } };
         },
     });
-    const pick = async (ctx: ExtensionCommandContext): Promise<Problem | undefined> => {
-        const keyword = await ctx.ui.input("选题 · 标题或题号（留空浏览）", "例如 接雨水 或 42");
-        if (keyword === undefined) return;
-        const difficulty = await ctx.ui.select("难度", ["全部", "EASY", "MEDIUM", "HARD"]);
-        if (!difficulty) return;
+    const chooseSummary = async (ctx: ExtensionCommandContext) => {
         const api = await client();
-        let skip = 0;
-        while (true) {
-            ctx.ui.notify("正在读取题库…", "info");
-            const page = await api.search(keyword, difficulty === "全部" ? "" : difficulty, skip);
-            const labels = page.items.map(item => `${item.id} · ${item.title} · ${item.difficulty}${item.paid ? " · 会员" : ""}`);
-            const options = [...labels, ...(skip + page.items.length < page.total && page.items.length ? ["下一页 →"] : []), ...(skip ? ["← 上一页"] : [])];
-            if (!options.length) { ctx.ui.notify("没有找到题目，可换个关键词重试。", "info"); return; }
-            const selected = await ctx.ui.select(`中国站题库 · 第 ${Math.floor(skip / 20) + 1} 页`, options);
-            if (!selected) return;
-            if (selected === "下一页 →") { skip += 20; continue; }
-            if (selected === "← 上一页") { skip = Math.max(0, skip - 20); continue; }
-            const item = page.items[labels.indexOf(selected)];
-            if (item) return api.problem(item.slug);
-        }
+        const status = await localStatusIndex(workspace.home);
+        return openProblemPicker(ctx, { search: api.search.bind(api), status });
+    };
+    // Reopen the practice with the newest saved work, never a blank first attempt.
+    const openPractice = async (problem: Problem): Promise<Workspace> => {
+        const latest = await new Workspace(workspace.home, problem).latestPractice();
+        return new Workspace(workspace.home, problem, latest);
+    };
+    const pick = async (ctx: ExtensionCommandContext): Promise<Problem | undefined> => {
+        const summary = await chooseSummary(ctx);
+        if (!summary) return undefined;
+        ctx.ui.notify("正在读取真实题目…", "info");
+        return (await client()).problem(summary.slug);
     };
     pi.registerCommand("leet", {
         description: "LeetCode 中国站：选题、Go 工作台、在线运行、提交和 Pi 求助",
@@ -263,7 +260,7 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                 } else if (command === "pick" || command === "open") {
                     const problem = await pick(ctx);
                     if (!problem) return;
-                    workspace = new Workspace(workspace.home, problem);
+                    workspace = await openPractice(problem);
                 } else if (command.startsWith("open ")) {
                     ctx.ui.notify("正在读取真实题目…", "info");
                     workspace = new Workspace(workspace.home, await (await client()).problem(command.slice(5)));
@@ -312,14 +309,18 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                     if (running) { ctx.ui.notify("当前操作仍在运行；可继续编辑，关闭工作台会停止本地等待。", "info"); return; }
                     if (!await ensureConnection(ctx, pi, auth, backendFactory, kind === "submit" ? "正式提交" : kind === "run" ? "在线运行" : "恢复查询")) return;
                     controller = new AbortController(); startedAt = Date.now(); operationError = undefined;
+                    const target = { practice, workspace };
                     job = execute(kind, controller.signal, recordId, true, record => {
+                        // A switch or cancel must never write another problem's result into the new workbench.
+                        if (target.practice !== practice || target.workspace !== workspace) return;
                         practice.result = record;
                         currentScreen?.setExecution(record);
                         if (record.state === "complete") pendingGuidance = true;
                     }).then(() => undefined).catch(error => {
+                        if (target.workspace !== workspace) return;
                         operationError = (error as Error).message;
                         currentScreen?.reportError(operationError, false);
-                    }).finally(() => { currentScreen?.setOperation(""); });
+                    }).finally(() => { if (target.workspace === workspace) currentScreen?.setOperation(""); });
                 };
                 const stopWaiting = async () => { controller?.abort(); await job; };
                 if (command === "cases") await editCases();
@@ -373,6 +374,23 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                         if (!url) { ctx.ui.notify("演示题没有平台原题链接，请先选择真实题目。", "info"); continue; }
                         try { await openPlatform(pi, url); }
                         catch (error) { operationError = `${(error as Error).message}\n可复制地址：${url}`; }
+                        continue;
+                    }
+                    if (action === "pick") {
+                        // The workbench saved the draft before returning this action.
+                        operationError = undefined;
+                        try {
+                            const summary = await chooseSummary(ctx);
+                            if (summary) {
+                                workspace = await openPractice(await (await client()).problem(summary.slug));
+                                practice = await workspace.open();
+                                await workspace.remember();
+                                remember(true);
+                                baseline = { code: practice.code, notes: practice.notes };
+                                pendingGuidance = false;
+                                await updateStatus(ctx);
+                            }
+                        } catch (error) { operationError = `未能打开所选题目：${(error as Error).message}`; }
                         continue;
                     }
                     if (action === "run" || action === "submit" || action === "cases" || action === "status") {

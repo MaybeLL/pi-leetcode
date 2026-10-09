@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initTheme } from "@earendil-works/pi-coding-agent";
 import extension from "../extensions/leetcode.js";
 import { Workbench } from "../src/workbench.js";
+import { ProblemPicker } from "../src/picker-ui.js";
 import { SecretInput } from "../src/secret-input.js";
 import { Workspace, codeHash } from "../src/workspace.js";
 import { PlatformError, type Credentials, type LeetCodeBackend } from "../src/backend.js";
@@ -449,4 +450,228 @@ test("original-page action opens the canonical URL and restores drafts; failure 
     assert.equal(screenCount, 3);
     assert.deepEqual(f.openedUrls, ["https://leetcode.cn/problems/two-sum/", "https://leetcode.cn/problems/two-sum/"]);
     assert.match((await (await new Workspace(f.home).resume()).read()).code, /draft/);
+});
+
+type PickerStep = (screen: any, done: (value: any) => void, fail: (error: unknown) => void) => void;
+function screenDriver(steps: PickerStep[]) {
+    let index = 0;
+    return {
+        steps,
+        custom(factory: any) {
+            return new Promise((done, reject) => {
+                const screen = factory(tui, theme, undefined, done);
+                const step = steps[index++];
+                if (!step) { reject(new Error(`unexpected screen: ${screen?.constructor?.name}`)); return; }
+                try { step(screen, done, reject); }
+                catch (error) { reject(error); }
+            });
+        },
+        count: () => index,
+    };
+}
+function pickerBackend(other: typeof problem & { difficulty?: string }, searchCalls: string[] = []): (credentials?: Credentials) => LeetCodeBackend {
+    return () => ({
+        id: "fixture",
+        async account() { return { username: "fixture", slug: "fixture" }; },
+        async search(keyword = "") { searchCalls.push(keyword); return { items: [{ id: other.id, slug: other.slug, title: other.title, difficulty: other.difficulty ?? "Hard", paid: false }], total: 1 }; },
+        async problem(reference: string) { return reference === other.slug ? other : problem; },
+        async start() { throw new Error("unexpected send"); },
+        async check() { return undefined; },
+    });
+}
+
+test("F8 saves before the picker, cancel restores the draft and view, and the picker never runs code", async (t) => {
+    const f = await fixture(t, pickerBackend({ ...problem, id: "42", slug: "trapping-rain-water", title: "接雨水" }));
+    const driver = screenDriver([
+        (screen) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            screen.practice.view.view = "code";
+            screen.render(80);
+            screen.handleInput("// 草稿\n");
+            screen.handleInput("\x1b[19~"); // F8
+        },
+        (screen) => {
+            assert.ok(screen instanceof ProblemPicker, "F8 opens the same picker as /leet pick");
+            assert.equal(screen.keyword, "");
+            screen.render(80);
+            screen.handleInput("\x1b"); // cancel
+        },
+        (screen) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            assert.equal(screen.practice.view.view, "code", "cancel restores the previous tab");
+            assert.match(screen.practice.code, /草稿/, "cancel restores the saved draft");
+            screen.render(80);
+            screen.handleInput("\x1b");
+            screen.handleInput("\x1b");
+        },
+    ]);
+    const ctx: any = {
+        mode: "tui", cwd: f.home, async waitForIdle() {},
+        ui: { setWidget() {}, notify(message: string, kind: string) { if (kind === "error" && !/文件已被其他编辑器修改/.test(message)) assert.fail(message); }, custom: driver.custom },
+    };
+    await f.command.handler("open 1", ctx);
+    assert.equal(driver.count(), 3);
+    assert.match((await (await new Workspace(f.home).resume()).read()).code, /草稿/);
+});
+
+test("F8 picking another problem switches and keeps the original practice on disk", async (t) => {
+    const other = { ...problem, id: "42", slug: "trapping-rain-water", title: "接雨水", statement: "# 42 · 接雨水\n\n题意" };
+    const f = await fixture(t, pickerBackend(other));
+    const driver = screenDriver([
+        (screen) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            screen.practice.view.view = "code";
+            screen.render(80);
+            screen.handleInput("// 原题草稿\n");
+            screen.handleInput("\x1b[19~");
+        },
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof ProblemPicker);
+            void (async () => {
+                await until(() => !screen.isLoading && screen.entries.length > 0);
+                assert.equal(screen.entries[0]?.summary.slug, "trapping-rain-water");
+                screen.render(80);
+                screen.handleInput("\r");
+            })().catch(fail);
+        },
+        (screen) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            assert.equal((screen as any).workspace.problem.slug, "trapping-rain-water");
+            assert.match(screen.render(80).join("\n"), /接雨水/);
+            screen.handleInput("\x1b");
+            screen.handleInput("\x1b");
+        },
+    ]);
+    const ctx: any = {
+        mode: "tui", cwd: f.home, async waitForIdle() {},
+        ui: { setWidget() {}, notify(message: string, kind: string) { if (kind === "error") assert.fail(message); }, custom: driver.custom },
+    };
+    await f.command.handler("open 1", ctx);
+    assert.equal(driver.count(), 3);
+    const last = JSON.parse(await readFile(join(f.home, "last-problem.json"), "utf8"));
+    assert.equal(last.problem.slug, "trapping-rain-water");
+    const original = await new Workspace(f.home, problem).read();
+    assert.match(original.code, /原题草稿/, "the original problem keeps its saved work");
+});
+
+test("a save conflict on F8 keeps the workbench and never opens the picker", async (t) => {
+    const f = await fixture(t, pickerBackend({ ...problem, id: "42", slug: "trapping-rain-water", title: "接雨水" }));
+    await new Workspace(f.home).initialize();
+    const directory = await new Workspace(f.home, problem).problemDirectory();
+    const driver = screenDriver([
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            screen.practice.view.view = "code";
+            screen.render(80);
+            screen.handleInput("// 本地草稿\n");
+            void (async () => {
+                await writeFile(join(directory, "solution.go"), "// 其他编辑器改写\n");
+                screen.handleInput("\x1b[19~"); // F8
+                await until(() => screen.render(80).join("\n").includes("文件已被其他编辑器修改"));
+                assert.match(screen.render(80).join("\n"), /本地草稿/, "the draft stays visible after a save failure");
+                screen.handleInput("\x11"); // Ctrl+Q discard on confirmation
+                await until(() => screen.render(80).join("\n").length > 0);
+            })().catch(fail);
+        },
+    ]);
+    const ctx: any = {
+        mode: "tui", cwd: f.home, async waitForIdle() {},
+        ui: { setWidget() {}, notify() {}, async confirm() { return true; }, custom: driver.custom },
+    };
+    await f.command.handler("open 1", ctx);
+    assert.equal(driver.count(), 1, "save failure stays in the workbench");
+    assert.equal((await readFile(join(directory, "solution.go"), "utf8")), "// 其他编辑器改写\n", "disk content is never overwritten");
+});
+
+test("/leet pick opens the same picker and cancelling changes nothing", async (t) => {
+    const other = { ...problem, id: "42", slug: "trapping-rain-water", title: "接雨水" };
+    const f = await fixture(t, pickerBackend(other));
+    const driver = screenDriver([
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof ProblemPicker);
+            void (async () => {
+                await until(() => !screen.isLoading && screen.entries.length > 0);
+                screen.render(80);
+                screen.handleInput("\x1b");
+            })().catch(fail);
+        },
+    ]);
+    const ctx: any = {
+        mode: "tui", cwd: f.home, async waitForIdle() {},
+        ui: { setWidget() {}, notify() {}, custom: driver.custom },
+    };
+    await f.command.handler("pick", ctx);
+    assert.equal(driver.count(), 1);
+    assert.equal((await new Workspace(f.home).resume()).problem.slug, "two-sum", "cancel keeps the current problem");
+});
+
+test("a background judge result lands on its own problem after an F8 switch", async (t) => {
+    const other = { ...problem, id: "42", slug: "trapping-rain-water", title: "接雨水", statement: "# 42 · 接雨水\n\n题意" };
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let starts = 0;
+    const f = await fixture(t, () => ({
+        id: "fixture",
+        async account() { return { username: "fixture", slug: "fixture" }; },
+        async search() { return { items: [{ id: "42", slug: other.slug, title: other.title, difficulty: "Hard", paid: false }], total: 1 }; },
+        async problem(reference: string) { return reference === other.slug ? other : problem; },
+        async start() { starts++; return "job-1"; },
+        async check() { await gate; return { verdict: "样例通过" }; },
+    }));
+    const { AuthStore } = await import("../src/auth.js");
+    await new AuthStore(f.home).save({ session: "fixture", csrf: "fixture" });
+    let sawNewResult = false;
+    const driver = screenDriver([
+        (screen) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true; screen.render(80);
+            screen.handleInput("\x12"); // Ctrl+R run
+        },
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true; screen.render(80);
+            void (async () => {
+                await until(() => starts === 1);
+                screen.handleInput("\x1b[19~"); // F8 while the judge is still running
+            })().catch(fail);
+        },
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof ProblemPicker);
+            void (async () => {
+                await until(() => !screen.isLoading && screen.entries.length > 0);
+                screen.render(80);
+                screen.handleInput("\r");
+            })().catch(fail);
+        },
+        (screen, _done, fail) => {
+            assert.ok(screen instanceof Workbench);
+            screen.focused = true;
+            screen.render(80);
+            void (async () => {
+                const aExecution = join(await new Workspace(f.home, problem).problemDirectory(), "execution.json");
+                release();
+                await until(async () => JSON.parse(await readFile(aExecution, "utf8")).state === "complete");
+                await new Promise(resolve => setTimeout(resolve, 30));
+                sawNewResult = /样例通过/.test(screen.render(80).join("\n"));
+                screen.handleInput("\x1b");
+                screen.handleInput("\x1b");
+            })().catch(fail);
+        },
+    ]);
+    const ctx: any = {
+        mode: "tui", cwd: f.home, async waitForIdle() {},
+        ui: { setWidget() {}, notify(message: string, kind: string) { if (kind === "error") assert.fail(message); }, custom: driver.custom },
+    };
+    await f.command.handler("open 1", ctx);
+    assert.equal(driver.count(), 4);
+    assert.equal(starts, 1);
+    assert.equal(sawNewResult, false, "the old problem's result never appears on the new problem");
+    assert.equal((await new Workspace(f.home, other).read()).result, undefined, "the new practice has no borrowed result");
+    assert.equal(JSON.parse(await readFile(join(await new Workspace(f.home, problem).problemDirectory(), "execution.json"), "utf8")).state, "complete", "the result is saved on its own problem");
+    assert.equal(f.messages.length, 0, "opening the picker never starts a model turn");
 });
