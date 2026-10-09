@@ -29,6 +29,7 @@ function renderCells(line: string, row: number): string {
             else if (values[0] === 38 && values[1] === 2) color = `rgb(${values.slice(2, 5).join(",")})`;
             else if (values[0] === 0 || values[0] === 39) { color = "#d9e0e9"; inverse = false; }
             else if (values[0] === 7) inverse = true;
+            else if (values[0] === 27) inverse = false;
             continue;
         }
         for (const { segment } of new Intl.Segmenter().segment(plain(part))) {

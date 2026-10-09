@@ -89,11 +89,12 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The footer shows contextual actions and F6 coaching; F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
+Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
-| F1–F4 or Tab / Shift+Tab | Switch problem, code, results, notes. |
+| F1–F4 | Switch problem, code, results, notes. |
+| Tab / Shift+Tab in code or notes | Insert four spaces / remove up to four leading spaces on the current line. |
 | Enter in code/notes | Insert a newline. |
 | Up / Down, PageUp / PageDown | Navigate focused content. |
 | Ctrl+S | Save code, notes, and position. |

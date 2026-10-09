@@ -339,14 +339,14 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                     const settings = (await workspace.settings())!;
                     let screen!: Workbench;
                     const tick = setInterval(() => {
-                        if (running) currentScreen?.setOperation(`正在等待判题 · ${Math.floor((Date.now() - startedAt) / 1000)} 秒 · 可编辑 · Esc 停止等待并返回`);
+                        if (running) currentScreen?.setOperation(`正在等待判题 · ${Math.floor((Date.now() - startedAt) / 1000)} 秒 · 可继续编辑`);
                     }, 500);
                     let action: WorkbenchAction;
                     try { action = await ctx.ui.custom<WorkbenchAction>((tui, theme, _keys, done) => {
                         screen = new Workbench(tui, theme, practice, workspace, settings.guidance, done, baseline);
                         currentScreen = screen;
                         if (operationError) screen.reportError(operationError);
-                        if (running) screen.setOperation("正在连接并等待结果 · 可继续编辑 · Esc 停止等待并返回");
+                        if (running) screen.setOperation("正在连接并等待结果 · 可继续编辑");
                         return screen;
                     }, { overlay: true, overlayOptions: { anchor: "center", width: "100%", maxHeight: "100%", margin: 0 } });
                     } finally { clearInterval(tick); currentScreen = undefined; }

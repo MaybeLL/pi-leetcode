@@ -1,6 +1,6 @@
 {
   "name": "pi-leetcode",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "LeetCode practice workbench and coaching for Pi Coding Agent",
   "type": "module",
   "repository": {
