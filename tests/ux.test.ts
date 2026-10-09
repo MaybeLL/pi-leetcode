@@ -46,6 +46,7 @@ async function fixture(t: any, factory: (credentials?: Credentials) => LeetCodeB
         events = new Map<string, any>();
     let command: any;
     const messages: string[] = [];
+    const openedUrls: string[] = [];
     extension(
         {
             registerCommand(_name: string, value: any) {
@@ -57,6 +58,10 @@ async function fixture(t: any, factory: (credentials?: Credentials) => LeetCodeB
             on(name: string, fn: any) {
                 events.set(name, fn);
             },
+            async exec(_command: string, args: string[]) {
+                openedUrls.push(args.at(-1)!);
+                return { code: openedUrls.length === 1 ? 0 : 1, stdout: "", stderr: "" };
+            },
             appendEntry() {},
             sendUserMessage(text: string) {
                 messages.push(text);
@@ -64,7 +69,7 @@ async function fixture(t: any, factory: (credentials?: Credentials) => LeetCodeB
         } as any,
         factory,
     );
-    return { home, tools, events, messages, command };
+    return { home, tools, events, messages, command, openedUrls };
 }
 test("anonymous first entry, deferred login and background editing preserve the sent snapshot", async (t) => {
     let authCalls = 0,
@@ -413,4 +418,35 @@ test("failed first public fetch can be retried without falling back to a demo", 
     await f.command.handler("", ctx);
     assert.equal(reads, 2); assert.equal(screens, 1);
     assert.equal((await new Workspace(f.home).resume()).problem.source, "leetcode");
+});
+
+
+test("original-page action opens the canonical URL and restores drafts; failure retains a copyable address", async t => {
+    const f = await fixture(t, (() => ({ id: "fixture", async problem() { return problem; } })) as any);
+    let screenCount = 0;
+    const ctx: any = { mode: "tui", cwd: f.home, async waitForIdle() {}, ui: {
+        setWidget() {}, notify(message: string, kind: string) { if (kind === "error") assert.fail(message); },
+        custom(factory: any) { return new Promise((done, reject) => {
+            const screen = factory(tui, theme, undefined, done);
+            screen.render(80); screenCount++;
+            try {
+                if (screenCount === 1) {
+                    screen.handleInput("\x1bOQ"); screen.render(80); screen.handleInput("// draft\n");
+                    screen.handleInput("\x1b[18~"); // F7
+                } else if (screenCount === 2) {
+                    assert.equal(screen.practice.view.view, "code");
+                    assert.match(screen.practice.code, /draft/);
+                    screen.handleInput("\x1b[18~");
+                } else {
+                    assert.match(screen.render(80).join("\n"), /未能打开浏览器/);
+                    assert.match(screen.render(80).join("\n"), /https:\/\/leetcode.cn\/problems\/two-sum\//);
+                    screen.handleInput("\x1b"); screen.handleInput("\x1b");
+                }
+            } catch (error) { reject(error); }
+        }); },
+    } };
+    await f.command.handler("open 1", ctx);
+    assert.equal(screenCount, 3);
+    assert.deepEqual(f.openedUrls, ["https://leetcode.cn/problems/two-sum/", "https://leetcode.cn/problems/two-sum/"]);
+    assert.match((await (await new Workspace(f.home).resume()).read()).code, /draft/);
 });

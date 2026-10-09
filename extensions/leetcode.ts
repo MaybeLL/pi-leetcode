@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { Workspace, codeHash } from "../src/workspace.js";
 import { Workbench, type WorkbenchAction } from "../src/workbench.js";
+import { originalProblemUrl } from "../src/problem-link.js";
 import { demoProblem, guidanceLabels, type Guidance } from "../src/problem.js";
 import { coachingInstructions, helpContext } from "../src/coaching.js";
 import { AuthStore } from "../src/auth.js";
@@ -366,8 +367,12 @@ export default function (pi: ExtensionAPI, backendFactory: BackendFactory = crea
                         await updateStatus(ctx);
                         continue;
                     }
-                    if (action === "platform") {
-                        try { await openPlatform(pi, "https://leetcode.cn/submissions/"); } catch (error) { operationError = (error as Error).message; }
+                    if (action === "platform" || action === "original") {
+                        operationError = undefined;
+                        const url = action === "original" ? originalProblemUrl(workspace.problem) : "https://leetcode.cn/submissions/";
+                        if (!url) { ctx.ui.notify("演示题没有平台原题链接，请先选择真实题目。", "info"); continue; }
+                        try { await openPlatform(pi, url); }
+                        catch (error) { operationError = `${(error as Error).message}\n可复制地址：${url}`; }
                         continue;
                     }
                     if (action === "run" || action === "submit" || action === "cases" || action === "status") {

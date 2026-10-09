@@ -271,3 +271,62 @@ test("mouse tabs use rendered cell bounds after resize and ignore non-tab or mod
         }
     }
 });
+
+test("clicking the displayed original problem link opens it instead of doing nothing", async t => {
+    const { store, practice, tui } = await fixture(t, 120, 30);
+    const statement = "# 题意\n\n说明\n\n[在 LeetCode 查看原题](https://leetcode.cn/problems/two-sum/)";
+    const problem = { ...store.problem, source: "leetcode" as const, statement, inputs: ["[2,7]\n9"] };
+    const workspace = new Workspace(store.home, problem);
+    await workspace.open();
+    let action: string | undefined;
+    const screen = new Workbench(tui, theme, practice, workspace, "light", value => { action = value; });
+    const lines = screen.render(120).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+    const y = lines.findIndex(line => line.includes("在 LeetCode"));
+    assert.ok(y > 3);
+    const x = visibleWidth(lines[y]!.slice(0, lines[y]!.indexOf("在 LeetCode")));
+    const result = screen.handleMouse({ type: "click", button: "left", x, y, screenX: x, screenY: y,
+        width: 120, height: 30, shift: false, alt: false, ctrl: false });
+    assert.equal(result?.handled, true);
+    await eventually(() => action === "original");
+});
+
+
+test("original-link hit regions follow scrolling, wrapping and split panes; one gesture opens once", async t => {
+    const { store, tui } = await fixture(t);
+    const statement = Array.from({ length: 40 }, (_, i) => `段落 ${i}\n`).join("\n") +
+        "\n[在 LeetCode 查看原题](https://leetcode.cn/problems/two-sum/)";
+    const workspace = new Workspace(store.home, { ...store.problem, source: "leetcode", statement });
+    await workspace.open();
+    for (const width of [153, 80, 32]) {
+        Object.assign(tui.terminal, { columns: width });
+        const practice = await workspace.read();
+        practice.view.problemOffset = 0;
+        practice.view.view = "problem";
+        const actions: string[] = [];
+        const screen = new Workbench(tui, theme, practice, workspace, "light", value => actions.push(value));
+        screen.render(width);
+        const event = { type: "click" as const, button: "left" as const, x: 3, y: 8, screenX: 3, screenY: 8,
+            width, height: 30, shift: false, alt: false, ctrl: false };
+        assert.equal(screen.handleMouse(event), undefined, "body text is not a link");
+        practice.view.problemOffset = 10000;
+        if (width >= 100) practice.view.view = "code";
+        const lines = screen.render(width).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+        const y = lines.findIndex(line => line.includes("在 LeetCode"));
+        assert.ok(y >= 4);
+        assert.equal(screen.handleMouse({ ...event, y, x: width - 1 }), undefined, "pane border is not clickable");
+        assert.equal(screen.handleMouse({ ...event, y, button: "right" }), undefined);
+        assert.deepEqual(screen.handleMouse({ ...event, y, type: "press" }), { handled: true, capture: true });
+        assert.equal(actions.length, 0, "press alone must not launch a browser");
+        screen.handleMouse({ ...event, y });
+        await eventually(() => actions.length === 1);
+        screen.handleMouse({ ...event, y, clickCount: 2 });
+        assert.deepEqual(actions, ["original"]);
+        const urlRow = lines.findIndex(line => line.includes("https://leetcode"));
+        assert.ok(urlRow >= 4);
+        screen.handleMouse({ ...event, y: urlRow });
+        await eventually(() => actions.length === 2);
+        practice.view.view = "results"; screen.render(width);
+        assert.equal(screen.handleMouse({ ...event, y }), undefined, "hidden statement has no stale hit region");
+        screen.dispose();
+    }
+});

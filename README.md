@@ -89,7 +89,7 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
+Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 is the keyboard alternative. Browser launch failures show a copyable URL. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
@@ -111,6 +111,7 @@ Wide terminals split problem and code into labelled panes; a highlighted border 
 | d in results | Toggle technical execution details. |
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | F6 | Save and start/continue coaching in Pi, using the existing discussion. |
+| Click the original-problem link / F7 | Save and open the current problem in your browser; retain your workbench position. |
 | Ctrl+G | Save and choose guidance. |
 | Esc in the tab bar | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |

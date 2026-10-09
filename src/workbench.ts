@@ -4,7 +4,8 @@ import { guidanceLabels, type Guidance, type View } from "./problem.js";
 import { codeHash, Workspace, type Practice } from "./workspace.js";
 import type { Execution } from "./execution.js";
 import { caseCount, resultSummary } from "./results.js";
-export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases" | "status" | "platform" | "review" | "coach";
+import { originalProblemUrl } from "./problem-link.js";
+export type WorkbenchAction = "close" | "help" | "guidance" | "discard" | "run" | "submit" | "cases" | "status" | "platform" | "review" | "coach" | "original";
 const views: View[] = ["problem", "code", "results", "notes"];
 const labels: Record<View, string> = { problem: "题目", code: "代码", results: "结果", notes: "笔记" };
 function padded(line: string, width: number): string {
@@ -29,6 +30,8 @@ export class Workbench implements Component, Focusable {
     private codeEditor: Editor;
     private notesEditor: Editor;
     private statement: Markdown;
+    private originalLink?: Markdown;
+    private linkRegions: { y: number; start: number; end: number }[] = [];
     private expected: {
         code: string;
         notes: string;
@@ -67,7 +70,12 @@ export class Workbench implements Component, Focusable {
         this.codeEditor.setText(practice.code);
         this.notesEditor.setText(practice.notes);
         this.expected = baseline || { code: practice.code, notes: practice.notes };
-        this.statement = new Markdown(readingMarkdown(workspace.problem.statement), 0, 0, { ...getMarkdownTheme(), codeBlockBorder: () => "" });
+        const url = originalProblemUrl(workspace.problem);
+        const link = url ? `[在 LeetCode 查看原题](${url})` : undefined;
+        const statement = workspace.problem.statement.trimEnd();
+        const body = link && statement.endsWith(link) ? statement.slice(0, -link.length).trimEnd() : statement;
+        this.statement = new Markdown(readingMarkdown(body), 0, 0, { ...getMarkdownTheme(), codeBlockBorder: () => "" });
+        if (link) this.originalLink = new Markdown(link, 0, 0, getMarkdownTheme());
         if (workspace.problem.source === "leetcode") this.status = "先读题，再推导；随时可向 Pi 求助";
     }
     private syncDraft(): void {
@@ -149,7 +157,15 @@ export class Workbench implements Component, Focusable {
     }
     handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
         if (this.busy || this.disposed || this.helpVisible || event.width !== this.renderedWidth) return;
-        if (event.y !== 2 || event.button !== "left" || !["press", "click"].includes(event.type)) return;
+        if (event.button !== "left" || !["press", "click"].includes(event.type)) return;
+        if (this.linkRegions.some(link => event.y === link.y && event.x >= link.start && event.x < link.end)) {
+            // Capture press, activate on the single synthesized click after release.
+            // Opening on both press and click can launch the browser twice.
+            if (event.type === "press") return { handled: true, capture: true };
+            if ((event.clickCount ?? 1) === 1) void this.perform("original");
+            return { handled: true };
+        }
+        if (event.y !== 2) return;
         const tab = this.tabRegions.find(tab => event.x >= tab.start && event.x < tab.end);
         if (!tab) return;
         this.practice.view.view = tab.view;
@@ -186,7 +202,7 @@ export class Workbench implements Component, Focusable {
             ["ctrl+s", "save"], ["ctrl+r", "preview"], ["ctrl+h", "help"],
             ["ctrl+g", "guidance"], ["ctrl+q", "discard"],
             ["ctrl+t", "submit"], ["ctrl+e", "cases"],
-            ["f6", "coach"], ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
+            ["f6", "coach"], ["f7", "original"], ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
         ];
         for (const [key, action] of keys) {
             if (matchesKey(data, key)) {
@@ -269,8 +285,18 @@ export class Workbench implements Component, Focusable {
         return lines;
     }
     private problemLines(width: number): string[] {
-        const all = this.statement.render(width);
+        const content = this.statement.render(width);
+        const linkLines = this.originalLink?.render(width) ?? [];
+        const all = linkLines.length ? [...content, "", ...linkLines] : content;
         this.practice.view.problemOffset = Math.min(this.practice.view.problemOffset, Math.max(0, all.length - this.contentHeight));
+        // The statement pane starts at (0,3); its content starts at (2,4).
+        // Register only visible link cells, including every wrapped URL line.
+        for (const [index, line] of linkLines.entries()) {
+            const row = content.length + 1 + index - this.practice.view.problemOffset;
+            const length = Math.min(width, visibleWidth(line));
+            if (row >= 0 && row < this.contentHeight && length > 0)
+                this.linkRegions.push({ y: 4 + row, start: 2, end: 2 + length });
+        }
         return all.slice(this.practice.view.problemOffset, this.practice.view.problemOffset + this.contentHeight);
     }
     private resultLines(width: number): string[] {
@@ -290,11 +316,12 @@ export class Workbench implements Component, Focusable {
         const height = this.tui.terminal.rows;
         this.renderedWidth = width;
         this.tabRegions = [];
+        this.linkRegions = [];
         if (width < 32 || height < 16) {
             return ["终端过小，请扩大至至少 32×16。", this.tabsFocused ? "Esc 保存返回 · Ctrl+Q 关闭" : "Esc 聚焦页签 · 再按 Esc 返回"].map(line => truncateToWidth(line, width));
         }
         if (this.helpVisible) {
-            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "点击页签直接切换并进入对应区域", "Esc 聚焦页签；← → 切页；Enter 进入", "编辑区 Tab 缩进 4 空格；Shift+Tab 减少行首缩进", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "F6 开始 / 继续带练（先保存，进入 Pi 对话）", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "页签栏再按 Esc：保存返回 Pi，停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
+            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "点击页签直接切换并进入对应区域", "点击题面底部链接 / F7：在浏览器打开原题", "Esc 聚焦页签；← → 切页；Enter 进入", "编辑区 Tab 缩进 4 空格；Shift+Tab 减少行首缩进", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "F6 开始 / 继续带练（先保存，进入 Pi 对话）", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "页签栏再按 Esc：保存返回 Pi，停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
             const items = lines.slice(1), available = height - 2;
             this.helpOffset = Math.min(this.helpOffset, Math.max(0, items.length - available));
             return [lines[0]!, ...Array.from({ length: available }, (_, i) => items[this.helpOffset + i] || ""), "F5 / Esc 返回原位置"]
@@ -321,6 +348,7 @@ export class Workbench implements Component, Focusable {
             ["Ctrl+T", "提交"], ["Ctrl+E", "用例"], ["Ctrl+H", "求助"], ["F6", "带练"],
             ["Ctrl+G", "引导"], ["Esc", this.tabsFocused ? "返回Pi" : "切页"], ["F5", "更多"],
         ];
+        if (this.originalLink) commands.push(["F7", "原题"]);
         if (this.tabsFocused) commands.unshift(["←/→", "切页"], ["Enter", "进入"]);
         if (view === "results" && !this.tabsFocused) commands.push(["←/→", "用例"], ["d", "详情"], ["Ctrl+P", "查询"]);
         const commandRows: string[] = [];
@@ -368,6 +396,7 @@ export class Workbench implements Component, Focusable {
         this.codeEditor.invalidate();
         this.notesEditor.invalidate();
         this.statement.invalidate();
+        this.originalLink?.invalidate();
     }
     dispose(): void { this.disposed = true; }
 }
