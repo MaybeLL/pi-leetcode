@@ -1,5 +1,5 @@
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import { Editor, Markdown, matchesKey, truncateToWidth, visibleWidth, type Component, type Focusable, type TUI, type KeyId } from "@earendil-works/pi-tui";
+import { Editor, Markdown, matchesKey, truncateToWidth, visibleWidth, type Component, type Focusable, type TUI, type KeyId, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { guidanceLabels, type Guidance, type View } from "./problem.js";
 import { codeHash, Workspace, type Practice } from "./workspace.js";
 import type { Execution } from "./execution.js";
@@ -43,6 +43,9 @@ export class Workbench implements Component, Focusable {
     private helpVisible = false;
     private helpOffset = 0;
     private operation = "";
+    private tabsFocused = false;
+    private tabRegions: { view: View; start: number; end: number }[] = [];
+    private renderedWidth = 0;
     constructor(private tui: TUI, private theme: Theme, readonly practice: Practice, private workspace: Workspace, private guidance: Guidance, private done: (action: WorkbenchAction) => void, baseline?: {
         code: string;
         notes: string;
@@ -77,7 +80,7 @@ export class Workbench implements Component, Focusable {
         this.error = message;
         this.errorTitle = "操作未完成";
         this.status = `操作未完成：${message}`;
-        if (focus) this.practice.view.view = "results";
+        if (focus) { this.practice.view.view = "results"; this.tabsFocused = false; }
         this.practice.view.resultOffset = 0;
         if (!this.disposed) this.tui.requestRender();
     }
@@ -131,6 +134,7 @@ export class Workbench implements Component, Focusable {
             }
         }
         catch (error) {
+            this.tabsFocused = false;
             this.errorTitle = "保存失败";
             this.error = (error as Error).message;
             this.practice.view.view = "results";
@@ -143,6 +147,16 @@ export class Workbench implements Component, Focusable {
                 this.tui.requestRender();
         }
     }
+    handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+        if (this.busy || this.disposed || this.helpVisible || event.width !== this.renderedWidth) return;
+        if (event.y !== 2 || event.button !== "left" || !["press", "click"].includes(event.type)) return;
+        const tab = this.tabRegions.find(tab => event.x >= tab.start && event.x < tab.end);
+        if (!tab) return;
+        this.practice.view.view = tab.view;
+        this.tabsFocused = false;
+        this.tui.requestRender();
+        return { handled: true, focus: true };
+    }
     handleInput(data: string): void {
         if (this.busy)
             return;
@@ -152,6 +166,11 @@ export class Workbench implements Component, Focusable {
         if (this.helpVisible) {
             this.helpOffset = Math.max(0, this.helpOffset + (matchesKey(data, "down") ? 1 : matchesKey(data, "up") ? -1 : 0));
             this.tui.requestRender(); return;
+        }
+        if (matchesKey(data, "escape")) {
+            if (this.tabsFocused) void this.perform("close");
+            else { this.tabsFocused = true; this.tui.requestRender(); }
+            return;
         }
         if (this.error && matchesKey(data, "ctrl+o")) {
             this.syncDraft(); this.busy = true;
@@ -165,7 +184,7 @@ export class Workbench implements Component, Focusable {
             "save" | "preview" | WorkbenchAction
         ][] = [
             ["ctrl+s", "save"], ["ctrl+r", "preview"], ["ctrl+h", "help"],
-            ["ctrl+g", "guidance"], ["escape", "close"], ["ctrl+q", "discard"],
+            ["ctrl+g", "guidance"], ["ctrl+q", "discard"],
             ["ctrl+t", "submit"], ["ctrl+e", "cases"],
             ["f6", "coach"], ["ctrl+p", "status"], ["ctrl+b", "platform"], ["ctrl+v", "review"],
         ];
@@ -177,8 +196,14 @@ export class Workbench implements Component, Focusable {
         }
         const viewKeys: KeyId[] = ["f1", "f2", "f3", "f4"];
         const view = views.find((_value, index) => matchesKey(data, viewKeys[index]!));
-        if (view)
+        if (view) {
             this.practice.view.view = view;
+            this.tabsFocused = false;
+        } else if (this.tabsFocused) {
+            const direction = matchesKey(data, "right") ? 1 : matchesKey(data, "left") ? -1 : 0;
+            if (direction) this.practice.view.view = views[(views.indexOf(this.practice.view.view) + direction + views.length) % views.length]!;
+            if (matchesKey(data, "enter")) this.tabsFocused = false;
+        }
         else if (this.practice.view.view === "code" || this.practice.view.view === "notes") {
             const editor = this.practice.view.view === "code" ? this.codeEditor : this.notesEditor;
             if (matchesKey(data, "tab")) editor.insertTextAtCursor("    ");
@@ -215,6 +240,7 @@ export class Workbench implements Component, Focusable {
         this.tui.requestRender();
     }
     private editorLines(width: number, editor: Editor, restore: boolean, active = true): string[] {
+        active = active && !this.tabsFocused;
         editor.focused = this.focused && active;
         let lines = editor.render(width);
         if (restore && this.restoreCursor) {
@@ -262,11 +288,13 @@ export class Workbench implements Component, Focusable {
     }
     render(width: number): string[] {
         const height = this.tui.terminal.rows;
+        this.renderedWidth = width;
+        this.tabRegions = [];
         if (width < 32 || height < 16) {
-            return ["终端过小，请扩大至至少 32×16。", "Esc 保存返回 · Ctrl+Q 关闭草稿"].map(line => truncateToWidth(line, width));
+            return ["终端过小，请扩大至至少 32×16。", this.tabsFocused ? "Esc 保存返回 · Ctrl+Q 关闭" : "Esc 聚焦页签 · 再按 Esc 返回"].map(line => truncateToWidth(line, width));
         }
         if (this.helpVisible) {
-            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "编辑区 Tab 缩进 4 空格；Shift+Tab 减少行首缩进", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "F6 开始 / 继续带练（先保存，进入 Pi 对话）", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "Esc 保存返回 Pi，并停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
+            const lines = ["快捷键 · F5 / Esc 返回 · ↑ ↓ 滚动", "F1 题目 · F2 代码 · F3 结果 · F4 笔记", "点击页签直接切换并进入对应区域", "Esc 聚焦页签；← → 切页；Enter 进入", "编辑区 Tab 缩进 4 空格；Shift+Tab 减少行首缩进", "Ctrl+S 保存；编辑区 Enter 换行", "Ctrl+R 运行样例（未连接时引导登录）", "Ctrl+T 正式提交到当前账户", "Ctrl+E 编辑用例", "结果页 ← → 切换用例；d 执行详情", "Ctrl+P 恢复查询（不重新发送）", "Ctrl+B 打开平台记录", "F6 开始 / 继续带练（先保存，进入 Pi 对话）", "Ctrl+H 求助 · Ctrl+G 调整引导", "Ctrl+V 复盘与学习记录", "保存冲突：Ctrl+O 另存草稿", "页签栏再按 Esc：保存返回 Pi，停止本地等待", "Ctrl+Q 关闭；未保存草稿需确认", "远程任务不会因关闭界面而取消", "回答后 /leet 返回原编辑位置"];
             const items = lines.slice(1), available = height - 2;
             this.helpOffset = Math.min(this.helpOffset, Math.max(0, items.length - available));
             return [lines[0]!, ...Array.from({ length: available }, (_, i) => items[this.helpOffset + i] || ""), "F5 / Esc 返回原位置"]
@@ -281,16 +309,20 @@ export class Workbench implements Component, Focusable {
         const header = row(fg("accent", ` ${this.workspace.problem.id} · ${this.workspace.problem.title}`), fg("muted", "pi-leetcode "));
         const metadata = row(` ${guidanceLabels[this.guidance]} · ${this.workspace.problem.source === "demo" ? "演示题" : "中国站"} · Go`,
             fg(this.dirty ? "warning" : "muted", this.dirty ? "未保存 ● " : "已保存 "));
+        let tabColumn = 0;
         const tabs = views.map((item, i) => {
             const label = ` ${item === view ? "▸ " : ""}F${i + 1} ${width < 60 ? labels[item].slice(0, 1) : labels[item]} `;
+            this.tabRegions.push({ view: item, start: tabColumn, end: tabColumn + visibleWidth(label) });
+            tabColumn += visibleWidth(label);
             return item === view ? fg("accent", `\x1b[1m\x1b[7m${label}\x1b[27m\x1b[22m`) : fg("muted", label);
         }).join("");
         const commands: [string, string][] = [
             ["Ctrl+S", "保存"], ["Ctrl+R", this.workspace.problem.source === "demo" ? "演示" : "运行"],
             ["Ctrl+T", "提交"], ["Ctrl+E", "用例"], ["Ctrl+H", "求助"], ["F6", "带练"],
-            ["Ctrl+G", "引导"], ["Esc", "返回"], ["F5", "更多"],
+            ["Ctrl+G", "引导"], ["Esc", this.tabsFocused ? "返回Pi" : "切页"], ["F5", "更多"],
         ];
-        if (view === "results") commands.push(["←/→", "用例"], ["d", "详情"], ["Ctrl+P", "查询"]);
+        if (this.tabsFocused) commands.unshift(["←/→", "切页"], ["Enter", "进入"]);
+        if (view === "results" && !this.tabsFocused) commands.push(["←/→", "用例"], ["d", "详情"], ["Ctrl+P", "查询"]);
         const commandRows: string[] = [];
         let commandRow = "";
         for (const [key, label] of commands) {
@@ -302,12 +334,13 @@ export class Workbench implements Component, Focusable {
         }
         if (commandRow) commandRows.push(commandRow);
         const footer = [
-            fg(this.error ? "error" : "muted", `状态 │ ${this.operation || this.status}`),
+            fg(this.error ? "error" : "muted", `状态 │ ${this.tabsFocused ? "页签导航中" + (this.operation ? " · " + this.operation : "") : this.operation || this.status}`),
             ...commandRows.map((line, i) => fg("muted", i === 0 ? "操作 │ " : "       ") + line),
         ];
         this.contentHeight = height - 5 - footer.length;
 
         const pane = (lines: string[], columns: number, title: string, active: boolean) => {
+            active = active && !this.tabsFocused;
             const color = active ? "accent" : "borderMuted";
             const label = truncateToWidth(` ${active ? "▸ " : ""}${title} `, columns - 2, "");
             const top = fg(color, "╭" + label + "─".repeat(Math.max(0, columns - 2 - visibleWidth(label))) + "╮");

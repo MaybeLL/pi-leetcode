@@ -173,7 +173,7 @@ test("real command, masked login and agent tools share the same saved solution a
                     const screen = factory(tui, theme, undefined, done);
                     if (screen instanceof Workbench) {
                         screen.practice.view.view = "code"; screen.focused = true; screen.render(80);
-                        screen.handleInput("// saved learner code\n"); screen.handleInput("\x1b");
+                        screen.handleInput("// saved learner code\n"); screen.handleInput("\x1b"); screen.handleInput("\x1b");
                     } else {
                         screen.handleInput("\x1b[200~LEETCODE_SESSION=secret; csrftoken=csrf\x1b[201~");
                         assert.doesNotMatch(screen.render(80).join("\n"), /secret|csrf$/);

@@ -130,7 +130,7 @@ test("anonymous first entry, deferred login and background editing preserve the 
                     screen.render(80);
                     screens++;
                     if (screens === 1) {
-                        screen.handleInput("\x1b");
+                        screen.handleInput("\x1b"); screen.handleInput("\x1b");
                         return;
                     }
                     void (async () => {
@@ -145,7 +145,7 @@ test("anonymous first entry, deferred login and background editing preserve the 
                         await until(() => screen.practice.result?.source === "leetcode" && screen.practice.result.state === "complete");
                         screen.handleInput("\x1bOR");
                         assert.match(screen.render(80).join("\n"), /代码已变化/);
-                        screen.handleInput("\x1b");
+                        screen.handleInput("\x1b"); screen.handleInput("\x1b");
                     })().catch(reject);
                 });
             },
@@ -202,7 +202,7 @@ test("cancelling deferred connection preserves practice without sending", async 
                 return new Promise((done) => {
                     const screen = factory(tui, theme, undefined, done);
                     screen.render(80);
-                    screen.handleInput("\x1b");
+                    screen.handleInput("\x1b"); screen.handleInput("\x1b");
                 });
             },
         },
@@ -305,6 +305,7 @@ test("coached practice opens UI first and only explicit coaching enters the conv
                     const screen = factory(tui, theme, undefined, done);
                     screen.render(80);
                     screen.handleInput(action);
+                    if (action === "\x1b") screen.handleInput(action);
                 });
             },
         },
@@ -372,7 +373,7 @@ test("repeated queries of the same completed result do not repeat proactive coac
                     screen.render(80);
                     void (async () => {
                         if (screen.practice.view.view === "results") await until(() => screen.practice.result?.state === "complete");
-                        screen.handleInput("\x1b");
+                        screen.handleInput("\x1b"); screen.handleInput("\x1b");
                     })().catch(reject);
                 });
             },
@@ -404,7 +405,7 @@ test("failed first public fetch can be retried without falling back to a demo", 
         custom(factory: any) { return new Promise(done => {
             const screen = factory(tui, theme, undefined, done);
             assert.equal(screen.practice.code, problem.template); screens++;
-            screen.handleInput("\x1b");
+            screen.handleInput("\x1b"); screen.handleInput("\x1b");
         }); },
     } };
     await f.command.handler("", ctx);

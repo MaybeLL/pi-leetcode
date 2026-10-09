@@ -46,11 +46,12 @@ try {
     await store.initialize();
     const practice = await store.open();
     await mkdir("docs/images", { recursive: true });
-    for (const [name, width, height] of [["workbench-wide", 120, 30], ["workbench-narrow", 80, 24], ["workbench-large", 153, 51]] as const) {
+    for (const [name, width, height] of [["workbench-wide", 120, 30], ["workbench-narrow", 80, 24], ["workbench-large", 153, 51], ["workbench-navigation", 80, 24]] as const) {
         practice.view.view = width >= 100 ? "code" : "problem";
         const tui = { terminal: { rows: height, columns: width }, requestRender() { } } as unknown as TUI;
         const screen = new Workbench(tui, theme, practice, store, "light", () => { });
         screen.focused = true;
+        if (name === "workbench-navigation") screen.handleInput("\x1b");
         const lines = screen.render(width);
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width * 9 + 36}" height="${(lines.length + 2) * 22 + 20}" viewBox="0 0 ${width * 9 + 36} ${(lines.length + 2) * 22 + 20}">
 <rect width="100%" height="100%" fill="#171b22"/>

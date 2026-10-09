@@ -94,7 +94,7 @@ test("save conflict keeps the draft and stays in the workbench", async (t) => {
     screen.render(120);
     screen.handleInput("草稿");
     await writeFile(join(await store.problemDirectory(), "solution.go"), "// external\n");
-    screen.handleInput("\x1b");
+    screen.handleInput("\x1b"); screen.handleInput("\x1b");
     await eventually(() => screen.render(120).join("\n").includes("保存失败"));
     assert.equal(resolved(), undefined);
     assert.equal((await store.read()).code, "// external\n");
@@ -203,4 +203,71 @@ test("long code keeps the active caret visible above the wrapped action area", a
     const lines = screen.render(32);
     assert.match(lines.slice(3).join("\n"), /\x1b\[7ml\x1b\[0mine29/);
     assert.equal(lines.length, 16);
+});
+
+test("Esc enters tab navigation without saving, arrows do not edit, Enter restores code cursor", async t => {
+    const { screen, practice, store, resolved } = await fixture(t, 80, 24);
+    const original = practice.code;
+    practice.view.view = "code";
+    practice.view.cursor = { line: 0, col: 0 };
+    screen.render(80); screen.handleInput("X");
+    screen.handleInput("\x1b");
+    assert.equal(resolved(), undefined);
+    assert.equal((await store.read()).code, original, "first Esc does not save or leave");
+    assert.match(screen.render(80).join("\n"), /页签导航中/);
+    assert.doesNotMatch(screen.render(80).slice(3).join("\n"), /\x1b\[7m/);
+    screen.handleInput("ignored"); screen.handleInput("\t");
+    screen.handleInput("\x1b[C");
+    assert.equal(practice.view.view, "results");
+    screen.handleInput("\x1b[D");
+    screen.handleInput("\r"); screen.render(80);
+    screen.handleInput("Y");
+    screen.handleInput("\x1b"); screen.handleInput("\x1b");
+    await eventually(() => resolved() === "close");
+    assert.equal((await store.read()).code, "XY" + original);
+    assert.equal((await store.read()).view.view, "code");
+});
+
+test("tab navigation wraps, help restores its focus, and F keys jump directly into content", async t => {
+    const { screen, practice, tui } = await fixture(t);
+    screen.render(120); screen.handleInput("\x1b");
+    screen.handleInput("\x1b[D");
+    assert.equal(practice.view.view, "notes");
+    screen.handleInput("\x1b[C");
+    assert.equal(practice.view.view, "problem");
+    screen.handleInput("\x1b[15~"); screen.handleInput("\x1b");
+    assert.match(screen.render(120).join("\n"), /页签导航中/);
+    for (const [width, height] of [[120, 30], [80, 24], [32, 16]]) {
+        Object.assign(tui.terminal, { rows: height, columns: width });
+        const lines = screen.render(width!);
+        assert.equal(lines.length, height);
+        assert.ok(lines.every(line => visibleWidth(line) <= width!));
+        for (const key of ["Enter", "Esc", "←/→"]) assert.ok(lines.join("\n").includes(key));
+    }
+    screen.handleInput("\x1bOQ");
+    const text = screen.render(32).join("\n");
+    assert.doesNotMatch(text, /页签导航中/);
+    assert.equal(practice.view.view, "code");
+});
+
+test("mouse tabs use rendered cell bounds after resize and ignore non-tab or modal clicks", async t => {
+    const { screen, practice, tui } = await fixture(t);
+    for (const width of [120, 80, 32]) {
+        Object.assign(tui.terminal, { columns: width });
+        for (const [i, view] of (["problem", "code", "results", "notes"] as const).entries()) {
+            screen.handleInput("\x1b"); // Start from tab navigation; clicking should enter content.
+            const bar = screen.render(width)[2]!.replace(/\x1b\[[0-9;]*m/g, "");
+            const x = visibleWidth(bar.slice(0, bar.indexOf(`F${i + 1}`)));
+            const event = { type: "press" as const, button: "left" as const, x, y: 2, screenX: x + 40, screenY: 12,
+                width, height: tui.terminal.rows, shift: false, alt: false, ctrl: false };
+            assert.deepEqual(screen.handleMouse(event), { handled: true, focus: true });
+            assert.equal(practice.view.view, view);
+            assert.doesNotMatch(screen.render(width).join("\n"), /页签导航中/);
+            assert.equal(screen.handleMouse({ ...event, y: 3 }), undefined);
+            assert.equal(screen.handleMouse({ ...event, button: "right" }), undefined);
+            screen.handleInput("\x1b[15~");
+            assert.equal(screen.handleMouse(event), undefined);
+            screen.handleInput("\x1b");
+        }
+    }
 });

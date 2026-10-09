@@ -93,7 +93,9 @@ Wide terminals split problem and code into labelled panes; a highlighted border 
 
 | Key | Action |
 | --- | --- |
-| F1–F4 | Switch problem, code, results, notes. |
+| Click a tab | Switch directly into that content pane (requires terminal mouse events). |
+| Esc, then Left / Right, then Enter | Focus the tab bar, select a page, enter its content. |
+| F1–F4 | Jump directly into problem, code, results, notes. |
 | Tab / Shift+Tab in code or notes | Insert four spaces / remove up to four leading spaces on the current line. |
 | Enter in code/notes | Insert a newline. |
 | Up / Down, PageUp / PageDown | Navigate focused content. |
@@ -110,10 +112,10 @@ Wide terminals split problem and code into labelled panes; a highlighted border 
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | F6 | Save and start/continue coaching in Pi, using the existing discussion. |
 | Ctrl+G | Save and choose guidance. |
-| Esc | Save and return to Pi. During execution: stop waiting, not the remote job. |
+| Esc in the tab bar | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
 
-The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. Esc stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling.
+The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. The first Esc focuses the tab bar while judging continues; a second Esc saves, stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling.
 
 Results retain the exact submitted code and inputs. Editing afterwards marks the result as belonging to an earlier version. Sample success never claims whole-problem Accepted. Missing platform output stays missing. If a POST may have succeeded but returned no job ID, its outcome is unknown and the plugin does not automatically repeat it.
 
