@@ -4,7 +4,7 @@
 
 ## 实施更新
 
-后续已完成 fork、SDK 提取及 Pi 可选后端接入。以下为选型时的原版评估；当前实现与验证状态见 [SDK 接入计划](sdk-integration-plan.md)。原版缺口已经在 fork 中补充，真实账户判题仍待验证。
+后续已完成 fork、SDK 提取、真实账户核心判题验收及默认后端切换。以下保留选型时的原版评估，不描述当前 fork 的能力；原版缺口已在 fork 中补充。当前实现见 [SDK 接入计划](sdk-integration-plan.md)，真实验证范围及限制见 [验收记录](integration-status.md)。
 
 ## 结论
 

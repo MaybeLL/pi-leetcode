@@ -2,6 +2,8 @@
 
 日期：2026-10-08。范围：中国站、Go、Pi 现有练习与教学工作流。
 
+状态：SDK 接入与默认切换已完成，当前新操作默认 SDK，direct 为显式回退。下文的初期 direct 默认值、旧 SDK 版本和测试数量是分阶段历史；当前使用方式见 [README](../README.md#backend-selection)，产物来源见 [vendor/README](../vendor/README.md)。
+
 ## 目标与约束
 
 复用 night-slayer18/leetcode-cli 的 API client，保留 Pi 工作台、指导档位、练习文件、代码快照和执行历史。以 v3.5.2 对应提交 `282096f5c3952ae0e94a704adac344ec73c7732b` 为 fork 基线，补丁集中在独立 SDK 入口与可恢复任务接口。保持上游 CLI 兼容，不引入其 TUI、全局工作区或凭据存储行为。
@@ -77,4 +79,4 @@ SDK 测试通过公开接口和可控 HTTP transport，覆盖请求次数、请�
 
 后续用户授权继续执行、发现问题即修复。修复题号模糊搜索漏查后续页，以及 SDK 编译失败 null 统计字段；SDK 升级到 3.5.2-pi.4（fork 294bc86）。真实样例、WA、编译/运行失败、一次正式 Submit Accepted 65/65、停止等待与原编号恢复均通过。Pi 1.1.0 的编辑保存/重启恢复/Ctrl+R/Ctrl+H 到真实模型均已验证。42 项 Pi 测试、382 项 fork 测试、类型检查和构建通过。
 
-默认后端现为 SDK，direct 仍可显式选择，旧任务归属规则不变。此前“未验证”和“默认 direct”的段落记录对应历史阶段，最新状态以本节和接入验收记录最后一节为准。
+默认后端现为 SDK，direct 仍可显式选择，旧任务归属规则不变。此前“未验证”和“默认 direct”的段落记录对应历史阶段，SDK 默认值以本节及 [README](../README.md#backend-selection) 为准；完整证据与剩余限制见 [接入验收记录](integration-status.md)。

@@ -28,6 +28,19 @@ Enter `/leet`. First use creates `~/.pi/leetcode/` and opens the public Two Sum 
 
 The first Run or Submit requests account connection if needed, then continues that operation. Cancel returns to your saved practice. Existing credentials are reused. `/leet doctor` shows the loaded extension path, backend, runtime and data locations when diagnosing installation problems.
 
+### Update an installed copy
+
+Save your work and exit Pi, then update the same Git source used for installation:
+
+```bash
+pi update git:github.com/MaybeLL/pi-leetcode
+pi
+```
+
+Restarting Pi alone does not update its installed package. Likewise, pulling a separate development checkout does not update Pi's installed Git copy. A source pinned to a tag or commit stays pinned; check `pi list` and your installed Pi's `pi update --help` if the update does not follow the expected source.
+
+**Still seeing `F2 代码` or `页签导航中`?** Those belong to the old interface. Leave the workbench and run `/leet doctor` to check the loaded extension path. The current interface has **F1 做题 / F3 结果 / F4 笔记**, with `←/→ 切页` in reading mode. To test a checkout without loading an installed copy, use the explicit command below. Do not delete your practice directory to fix a package-loading problem.
+
 ### Develop from this checkout
 
 Run these commands **inside the cloned pi-leetcode directory**:
@@ -89,7 +102,13 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Problem and code share one **F1 做题** page, not separate tabs. Wide terminals show them side by side; narrow terminals show the focused content. Open the page to read and scroll immediately, press Enter to write code, and Esc to return to reading with the editor cursor preserved. In reading mode, Left/Right cycles through practice, results and notes, while Up/Down and PageUp/PageDown scroll the current content. Notes also open in reading mode: Enter edits and Esc returns to notes reading. Only the active pane has a filled inverse heading and ▸ marker; the selected page uses a quieter ● marker. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 (spelled out as “F7 去leetcode查看原题”) is the keyboard alternative. Browser launch failures show a copyable URL. F8 选题 opens the same problem browser as `/leet pick` from inside the workbench. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return, original problem, problem picker and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
+Problem and code share one **F1 做题** page, not separate tabs. At 100 columns or wider they appear side by side; narrower terminals show the focused content. A newly opened practice starts in reading mode; returning to a saved practice can restore its editing state.
+
+- **Reading:** Left/Right cycles through practice, results and notes. Up/Down and PageUp/PageDown scroll. Enter starts code editing on the practice page or notes editing on the notes page; it does nothing on results.
+- **Editing:** Left/Right moves the cursor, Enter inserts a newline, and Esc returns to reading the same page. Switching between reading and editing in the open workbench preserves the editor cursor and draft.
+- **Focus:** Only the active pane has a filled inverse heading and ▸ marker. The selected page uses a quieter ● marker. The footer names the current activity and shows its actions; F5 opens the full keymap.
+
+The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 (shown as “F7 去leetcode查看原题”) is the keyboard alternative. Browser launch failures show a copyable URL. F8 选题 opens the same problem browser as `/leet pick`. Actions wrap in narrow windows. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
@@ -98,8 +117,9 @@ Problem and code share one **F1 做题** page, not separate tabs. Wide terminals
 | Enter while reading the problem or notes | Start/resume code or notes editing without inserting a newline. |
 | Esc while editing code or notes | Return to reading that same page, without saving or stopping a background judge. |
 | Esc while reading results or notes | Return to reading the problem. |
-| Tab / Shift+Tab in code or notes | Insert four spaces / remove up to four leading spaces on the current line. |
-| Enter in code/notes | Insert a newline. |
+| Left / Right while editing code or notes | Move the cursor, without switching pages. |
+| Tab / Shift+Tab while editing code or notes | Insert four spaces / remove up to four leading spaces on the current line. |
+| Enter while editing code or notes | Insert a newline. |
 | Up / Down, PageUp / PageDown | Navigate focused content. |
 | Ctrl+S | Save code, notes, and position. |
 | Ctrl+R | Save and run inputs (demo: fixed fixture). |
@@ -114,7 +134,7 @@ Problem and code share one **F1 做题** page, not separate tabs. Wide terminals
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | F6 | Save and start/continue coaching in Pi, using the existing discussion. |
 | Click the original-problem link / F7 去leetcode查看原题 | Save and open the current problem in your browser; retain your workbench position. |
-| F8 选题 | Save the draft, notes and position, then open the problem browser. Cancelling restores the same problem, tab, cursor and reading position; confirming another problem keeps the original files. Selecting a problem you have practised before continues its newest practice (including later re-practice attempts); only `/leet restart` starts a blank attempt. |
+| F8 选题 | Save the draft, notes and position, then open the problem browser. Cancelling restores the same problem, page, reading/editing state, code cursor and reading offsets; confirming another problem keeps the original files. Selecting a problem you have practised before continues its newest practice (including later re-practice attempts); only `/leet restart` starts a blank attempt. |
 | Ctrl+G | Save and choose guidance. |
 | Esc while reading the problem | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
@@ -124,6 +144,13 @@ The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, 
 ### Problem browser and local status
 
 The browser distinguishes focus from selection: the search label, focused filter or focused result row uses inverse bold with ▸; ✓ marks applied filters, and ● remembers the selected result when focus is elsewhere. An inactive search field has no fake caret. The footer describes the keys for the current area (search, filters or list); key/action pairs and filters wrap intact on narrow terminals. Clicking a filter also moves keyboard focus to it.
+
+| Focus | Keys |
+| --- | --- |
+| Search | Type a keyword; Down focuses the list; Tab focuses filters; Enter opens the selected confirmed result. |
+| Filters | Left/Right moves focus without applying a change; Enter or Space applies it; Tab focuses the list; Up returns to search. |
+| List | Up/Down selects; Left/Right or PageUp/PageDown changes page; Enter opens the selected result (or continues scanning an empty, unexhausted list); Tab returns to search. |
+| Anywhere in the browser | Esc cancels; Ctrl+R retries a failed query. |
 
 Inside the browser, typing pauses for about 300 ms before searching; a pure number pins the exact question once at the front (removed from every later page, so paging never repeats it), and clearing the box returns to browsing under the current filters. A new search keeps the previous confirmed list on screen with a “搜索中” marker, and a late response from an older query or filter never replaces the current results. Rows on a not-yet-confirmed list are labelled as the previous result and cannot be opened until the current search settles. Loading, empty and failed states are shown in place, and a failed request offers a retry without losing the keyword or filters. With 仅免费, the browser keeps scanning past a page of member problems; if none is found within the scan window it offers 继续加载 instead of reporting no results.
 
@@ -186,6 +213,6 @@ PI_LEETCODE_BACKEND=sdk node --import tsx scripts/verify-platform.ts --authentic
 
 Verification execution records are retained under `~/.pi/leetcode/verification/`. A failed/unknown probe must be investigated before rerunning it; do not repeatedly submit to test connectivity.
 
-Automated tests use temporary directories and simulated HTTP responses, not a live account. See [product design](docs/product-design.md), [development plan](docs/full-workflow-plan.md), [platform research](docs/platform-integration-research.md), and [verification status](docs/integration-status.md).
+Automated tests use temporary directories and simulated HTTP responses, not a live account. `npm run preview` regenerates SVG component snapshots in `docs/images/`; these are not captures of a live Pi terminal. See [product design](docs/product-design.md) for the current interaction contract and [verification status](docs/integration-status.md) for evidence and limits. The [development plan](docs/full-workflow-plan.md) and [platform research](docs/platform-integration-research.md) retain their original planning/research context; [UX history](docs/ux-improvements.md) records how the interface evolved.
 
 Later work includes broader live judge coverage, COM/other languages, offline catalog, per-case platform verdicts, broader teaching evaluation and a local runner. The underlying website endpoints are not a promised stable third-party API.

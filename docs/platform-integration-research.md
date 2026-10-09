@@ -1,6 +1,6 @@
 # LeetCode platform integration research
 
-Research date: 2026-10-08 (Asia/Shanghai). This is a development-planning note, not a claim that live integration already works.
+Research date: 2026-10-08 (Asia/Shanghai). This is a historical development-planning note, not current usage documentation. Its source observations and proposed designs are retained as research evidence. Live CN integration was implemented and verified later; see [current usage](../README.md) and [verification records](integration-status.md) for the actual scope and remaining limits.
 
 ## Evidence and limits
 
