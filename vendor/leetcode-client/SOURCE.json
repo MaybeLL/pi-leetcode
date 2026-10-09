@@ -1,0 +1,7 @@
+{
+  "upstream": "https://github.com/night-slayer18/leetcode-cli",
+  "upstreamRevision": "282096f5c3952ae0e94a704adac344ec73c7732b",
+  "fork": "https://github.com/MaybeLL/leetcode-cli",
+  "forkRevision": "294bc860bdce67422de53c7111e783e78f885f0e",
+  "dirty": false
+}

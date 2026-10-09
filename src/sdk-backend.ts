@@ -1,4 +1,4 @@
-import { LeetCodeClient, ClientError, clientError } from "@maybell/leetcode-client";
+import { LeetCodeClient, ClientError, clientError } from "../vendor/leetcode-client/client.js";
 import { PlatformError, SDK_BACKEND_ID, type Account, type Credentials, type LeetCodeBackend, type Problem, type ProblemSummary, type JudgeResult } from "./backend.js";
 import { cleanText, decodeJudge, statementMarkdown } from "./platform.js";
 import { slugForNumber } from "./problem-reference.js";

@@ -216,3 +216,10 @@ Verification execution records are retained under `~/.pi/leetcode/verification/`
 Automated tests use temporary directories and simulated HTTP responses, not a live account. `npm run preview` regenerates SVG component snapshots in `docs/images/`; these are not captures of a live Pi terminal. See [product design](docs/product-design.md) for the current interaction contract and [verification status](docs/integration-status.md) for evidence and limits. The [development plan](docs/full-workflow-plan.md) and [platform research](docs/platform-integration-research.md) retain their original planning/research context; [UX history](docs/ux-improvements.md) records how the interface evolved.
 
 Later work includes broader live judge coverage, COM/other languages, offline catalog, per-case platform verdicts, broader teaching evaluation and a local runner. The underlying website endpoints are not a promised stable third-party API.
+
+## License
+
+Apache-2.0. The plugin vendors a library-only build of the Apache-2.0
+[leetcode-cli](https://github.com/night-slayer18/leetcode-cli) fork under
+`vendor/leetcode-client/`. See [NOTICE](NOTICE) for attribution and
+[vendor/README.md](vendor/README.md) for the pinned revisions and refresh steps.

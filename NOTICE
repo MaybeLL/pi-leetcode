@@ -1,0 +1,13 @@
+pi-leetcode
+Copyright 2026 MaybeLL
+
+This product includes software developed as part of leetcode-cli
+(https://github.com/night-slayer18/leetcode-cli), Copyright 2026
+night-slayer18, licensed under the Apache License, Version 2.0.
+
+The vendored client in vendor/leetcode-client/ is a library-only build of the
+pi-sdk branch of https://github.com/MaybeLL/leetcode-cli at revision
+294bc860bdce67422de53c7111e783e78f885f0e, based on upstream commit
+282096f5c3952ae0e94a704adac344ec73c7732b (v3.5.2). The upstream license is
+retained in vendor/leetcode-client/LICENSE and the maintained change log in
+vendor/leetcode-client/README.md.

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LeetCodeClient, ClientError } from "@maybell/leetcode-client";
+import { LeetCodeClient, ClientError } from "../vendor/leetcode-client/client.js";
 import { SdkBackend } from "../src/sdk-backend.js";
 import { createBackend } from "../src/backend-factory.js";
 import { DIRECT_BACKEND_ID, SDK_BACKEND_ID } from "../src/backend.js";

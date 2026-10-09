@@ -1,11 +1,17 @@
 {
   "name": "pi-leetcode",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "LeetCode practice workbench and coaching for Pi Coding Agent",
+  "license": "Apache-2.0",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/MaybeLL/pi-leetcode.git"
+  },
+  "homepage": "https://github.com/MaybeLL/pi-leetcode#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "keywords": [
     "pi-package",
@@ -20,6 +26,7 @@
     "skills",
     "docs",
     "README.md",
+    "NOTICE",
     "vendor"
   ],
   "pi": {
@@ -33,7 +40,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "preview": "tsx scripts/render-preview.ts"
+    "preview": "tsx scripts/render-preview.ts",
+    "prepublishOnly": "npm run check && npm test"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -50,10 +58,8 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@maybell/leetcode-client": "file:vendor/maybell-leetcode-client-3.5.2-pi.4.tgz",
-    "turndown": "^7.2.4"
-  },
-  "bundleDependencies": [
-    "@maybell/leetcode-client"
-  ]
+    "got": "14.6.6",
+    "turndown": "^7.2.4",
+    "zod": "4.3.6"
+  }
 }
