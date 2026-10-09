@@ -72,7 +72,7 @@ If the platform rejects access or presents a browser challenge, complete normal 
 | Command | Behavior |
 | --- | --- |
 | `/leet` | Open Two Sum on first use, otherwise resume the current/recent practice. |
-| `/leet pick` | Search titles/numbers, filter difficulty, and browse pages. |
+| `/leet pick` | Open the shared problem browser: the first screen lists problems immediately, search runs as you type, difficulty and free-only filters combine with the keyword, and paging keeps the current page visible. Each row shows the number, title, Chinese difficulty, member mark, and local practice status. |
 | `/leet open 42` | Open by number, slug, or a `leetcode.cn/problems/...` URL. |
 | `/leet recent` | Restore one of the last 50 practice entries; older files are retained. |
 | `/leet restart` | Start a fresh attempt, preserving the previous code and notes. |
@@ -89,7 +89,7 @@ If the platform rejects access or presents a browser challenge, complete normal 
 
 ### Workbench keys
 
-Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 is the keyboard alternative. Browser launch failures show a copyable URL. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
+Wide terminals split problem and code into labelled panes; a highlighted border and ▸ mark the active pane. Narrow terminals switch views. The original-problem link at the bottom of a real statement is clickable, including wrapped URL lines; F7 (spelled out as “F7 去leetcode查看原题”) is the keyboard alternative. Browser launch failures show a copyable URL. F8 选题 opens the same problem browser as `/leet pick` from inside the workbench. The selected tab uses a filled, inverse highlight and an arrow. The footer separates status from actions: save, run, submit, cases, help, coaching, guidance, return, original problem, problem picker and more remain visible, wrapping in narrow windows. F5 lists the full keymap. The editor provides basic text editing, without IDE completion.
 
 | Key | Action |
 | --- | --- |
@@ -111,12 +111,19 @@ Wide terminals split problem and code into labelled panes; a highlighted border 
 | d in results | Toggle technical execution details. |
 | F5 | Open keyboard help; F5/Esc returns to the same focus. |
 | F6 | Save and start/continue coaching in Pi, using the existing discussion. |
-| Click the original-problem link / F7 | Save and open the current problem in your browser; retain your workbench position. |
+| Click the original-problem link / F7 去leetcode查看原题 | Save and open the current problem in your browser; retain your workbench position. |
+| F8 选题 | Save the draft, notes and position, then open the problem browser. Cancelling restores the same problem, tab, cursor and reading position; confirming another problem keeps the original files. Selecting a problem you have practised before continues its newest practice (including later re-practice attempts); only `/leet restart` starts a blank attempt. |
 | Ctrl+G | Save and choose guidance. |
 | Esc in the tab bar | Save and return to Pi. During execution: stop waiting, not the remote job. |
 | Ctrl+Q | Close; confirm before discarding an unsaved draft. |
 
-The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. The first Esc focuses the tab bar while judging continues; a second Esc saves, stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling.
+The minimum viewport is 32×16; 80×24 or larger is recommended. While judging, the workbench stays open for reading and editing. Results update without stealing focus. The first Esc focuses the tab bar while judging continues; a second Esc saves, stops local waiting, preserves the job, and returns to Pi; `/leet status` resumes polling. If a background judge finishes after you have switched problems with F8, its result is written only to the problem that started it.
+
+### Problem browser and local status
+
+Inside the browser, typing pauses for about 300 ms before searching; a pure number pins the exact question once at the front (removed from every later page, so paging never repeats it), and clearing the box returns to browsing under the current filters. A new search keeps the previous confirmed list on screen with a “搜索中” marker, and a late response from an older query or filter never replaces the current results. Rows on a not-yet-confirmed list are labelled as the previous result and cannot be opened until the current search settles. Loading, empty and failed states are shown in place, and a failed request offers a retry without losing the keyword or filters. With 仅免费, the browser keeps scanning past a page of member problems; if none is found within the scan window it offers 继续加载 instead of reporting no results.
+
+The status column comes only from this machine's practice files: `未练习` means no local record, `已开始` means a record without a formal Accepted, and `曾通过` means a formal submit recorded by this plugin once returned Accepted. Sample runs never count, a later re-practice never erases a pass, and a problem removed from the 50-entry recent index still reports its real status. This is not your LeetCode account history and does not mean the problem is mastered; browsing, searching and opening need no login.
 
 Results retain the exact submitted code and inputs. Editing afterwards marks the result as belonging to an earlier version. Sample success never claims whole-problem Accepted. Missing platform output stays missing. If a POST may have succeeded but returned no job ID, its outcome is unknown and the plugin does not automatically repeat it.
 

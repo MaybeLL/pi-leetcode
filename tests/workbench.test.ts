@@ -330,3 +330,32 @@ test("original-link hit regions follow scrolling, wrapping and split panes; one 
         screen.dispose();
     }
 });
+
+test("the action bar spells out the original link, offers a clickable F8 选题, and wraps without losing meaning", async (t) => {
+    const { store, tui } = await fixture(t);
+    const statement = `# 1 · 两数之和\n\n题意\n\n[在 LeetCode 查看原题](https://leetcode.cn/problems/two-sum/)`;
+    const workspace = new Workspace(store.home, { ...store.problem, source: "leetcode", statement });
+    await workspace.open();
+    const practice = await workspace.read();
+    const actions: WorkbenchAction[] = [];
+    const screen = new Workbench(tui, theme, practice, workspace, "light", action => { actions.push(action); });
+    screen.focused = true;
+    for (const width of [153, 80, 32]) {
+        Object.assign(tui.terminal, { rows: 24, columns: width });
+        const lines = screen.render(width).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+        const text = lines.join("\n");
+        assert.match(text, /F7 去leetcode查看原题/, `full F7 label at ${width}`);
+        assert.match(text, /F8 选题/, `F8 action at ${width}`);
+        assert.ok(lines.every(line => visibleWidth(line) <= width), `no overflow at ${width}`);
+    }
+    Object.assign(tui.terminal, { rows: 24, columns: 80 });
+    const lines = screen.render(80).map(line => line.replace(/\x1b\[[0-9;]*m/g, ""));
+    const y = lines.findIndex(line => line.includes("F8 选题"));
+    assert.ok(y >= 0);
+    const x = visibleWidth(lines[y]!.slice(0, lines[y]!.indexOf("F8 选题"))) + 1;
+    const event = { type: "click" as const, button: "left" as const, x, y, screenX: x, screenY: y, width: 80, height: 30, shift: false, alt: false, ctrl: false };
+    assert.deepEqual(screen.handleMouse({ ...event, type: "press" }), { handled: true, capture: true });
+    assert.equal(actions.length, 0, "press alone must not switch problems");
+    screen.handleMouse(event);
+    await eventually(() => actions.includes("pick"));
+});

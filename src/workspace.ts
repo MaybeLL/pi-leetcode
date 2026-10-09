@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { cp, mkdir, readFile, readdir, rename, writeFile, unlink } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rename, stat, writeFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { demoProblem, type Guidance, type ViewState, defaultViewState } from "./problem.js";
@@ -263,6 +263,40 @@ export class Workspace {
         if (!["demo", "leetcode"].includes(problem.source) || typeof problem.statement !== "string" || typeof problem.template !== "string")
             throw new Error("最近练习记录格式无效，未重置数据。");
         return new Workspace(this.home, problem, data.attempt || "current");
+    }
+    private async baseDirectory(): Promise<string> {
+        const settings = await this.requireSettings();
+        return this.problem.source === "demo" ? join(settings.workspace, "problems", "0001-two-sum") :
+            join(settings.workspace, "problems", "cn", this.problem.slug);
+    }
+    /** Newest write time across a practice directory, or -Infinity when it has no files. */
+    private static async writtenAt(directory: string): Promise<number> {
+        const names = await readdir(directory).catch(() => []);
+        let latest = -Infinity;
+        for (const name of names) {
+            const info = await stat(join(directory, name)).catch(() => undefined);
+            if (info?.isFile() && info.mtimeMs > latest) latest = info.mtimeMs;
+        }
+        return latest;
+    }
+    /**
+     * The practice to reopen for this problem: the most recently written of the
+     * first practice and every re-practice attempt. Files, not the capped
+     * recent-50 index, decide, so a problem with saved work is never reopened blank.
+     */
+    async latestPractice(): Promise<string> {
+        const base = await this.baseDirectory();
+        const candidates = ["current", ...(await readdir(join(base, "attempts"), { withFileTypes: true }).catch(() => []))
+            .filter(entry => entry.isDirectory())
+            .map(entry => entry.name)];
+        let best = this.attempt;
+        let bestTime = -Infinity;
+        for (const name of candidates) {
+            const directory = name === "current" ? base : join(base, "attempts", name);
+            const time = await Workspace.writtenAt(directory);
+            if (time > bestTime) { bestTime = time; best = name; }
+        }
+        return best;
     }
     async restart(): Promise<Workspace> {
         await this.remember();
